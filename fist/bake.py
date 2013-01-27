@@ -44,13 +44,14 @@ def _flatten(x):
 
 class Cmd(object):
   def __init__(me, ctx):
-    object.__init__(me)
+    super(Cmd, me).__init__()
     me._ctx = ctx
     me._toks = []
     me._oxs = {}
     me.cwd = None
     me.showout = False
     me.showerr = True
+    me.env = {}
   
   def lit(me, *toks):
     me._toks += _flatten(toks)
@@ -86,7 +87,9 @@ class Cmd(object):
     
     def go():
       pipe = subprocess.PIPE
-      p = subprocess.Popen(me._toks, cwd=me.cwd, stdin=pipe, stdout=pipe, stderr=pipe)
+      env = dict(os.environ)
+      env.update(me.env)
+      p = subprocess.Popen(me._toks, cwd=me.cwd, env=env, stdin=pipe, stdout=pipe, stderr=pipe)
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
     
