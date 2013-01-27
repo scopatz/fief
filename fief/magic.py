@@ -3,6 +3,7 @@ import bake
 import os
 import shutil
 import tempfile
+import itertools
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
@@ -26,10 +27,16 @@ def fetch_nomemo_a(ctx, pkg):
   else:
     assert False # invalid source tuple
 
-def builder_nomemo_a(ctx, pkg):
+def load_nomemo_a(ctx, pkg):
   """Returns an asynchronous build bake function"""
   repo = ctx['repo']
   script = os.path.join(repo, pkg + '.py')
   ns = {}
   execfile(script, ns, ns)
-  yield async.Result(ns['build_a'])
+  yield async.Result((ns['depends_a'], ns['build_a']))
+
+def merge_lib_deps(*depss):
+  seen = set()
+  seen_add = seen.add
+  seq = itertools.chain(*depss)
+  return tuple(x for x in seq if x not in seen and not seen_add(x))

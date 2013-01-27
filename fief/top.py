@@ -10,7 +10,12 @@ returncode = [None]
 
 def top_a(ctx):
   pkg = ctx['pkg']
-  bld_a = yield async.WaitFor(magic.builder_nomemo_a(ctx, pkg))
+  dep_a, bld_a = yield async.WaitFor(magic.load_nomemo_a(ctx, pkg))
+  
+  # from the deps!
+  seen = set()
+  more = set([
+  
   path = yield async.WaitFor(ctx(bld_a))
   yield async.Result(path)
 

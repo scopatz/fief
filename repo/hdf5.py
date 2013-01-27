@@ -3,6 +3,9 @@ import bake
 import os
 import magic
 
+def depends_a(ctx):
+  yield async.Result({'zlib':()})
+
 def build_a(ctx):
   src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, 'hdf5'))
   
@@ -38,4 +41,4 @@ def build_a(ctx):
   
   cleanup()
   
-  yield async.Result(to)
+  yield async.Result(to, magic.merge_lib_deps(('zlib',), zlib_deps))

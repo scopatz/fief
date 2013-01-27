@@ -3,7 +3,11 @@ import bake
 import os
 import magic
 
+def depends_a(ctx):
+  yield async.Result({})
+
 def build_a(ctx):
+  deps = ctx['deps']
   src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, 'zlib'))
   
   to = yield async.WaitFor(ctx.outfile_a('build'))
