@@ -2,16 +2,21 @@
 import async
 import bake
 import subprocess
-import build_zlib
 import sys
+
+#import build_zlib
+import build_hdf5
 
 returncode = [None]
 
 def main_a():
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
-    args = {'tarball': 'zlib-1.2.7.tar.gz'}
-    path = yield async.WaitFor(oven.memo_a(build_zlib.build_zlib_a, args))
+    args = {
+      ('tarball','zlib'): 'zlib-1.2.7.tar.gz',
+      ('tarball','hdf5'): 'hdf5-1.8.10-patch1.tar.gz'
+    }
+    path = yield async.WaitFor(oven.memo_a(build_hdf5.build_hdf5_a, args))
     returncode[0] = 0
     sys.stdout.write(path)
   except subprocess.CalledProcessError, e:

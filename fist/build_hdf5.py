@@ -4,8 +4,10 @@ import os
 import shutil
 import tempfile
 
-def build_zlib_a(ctx):
-  ball = os.path.abspath(ctx['tarball', 'zlib'])
+import build_zlib
+
+def build_hdf5_a(ctx):
+  ball = os.path.abspath(ctx['tarball', 'hdf5'])
   name = os.path.split(ball)[-1].rsplit('.', 2)[0]
   
   bld = tempfile.mkdtemp()
@@ -16,13 +18,15 @@ def build_zlib_a(ctx):
   c.lit('tar', 'xzf').inf(ball)
   yield async.WaitFor(c.exec_a())
   
+  zlib_dir = yield async.WaitFor(ctx(build_zlib.build_zlib_a))
+  
   to = yield async.WaitFor(ctx.outfile_a('build'))
   to = os.path.abspath(to)
   os.mkdir(to)
   
   c = bake.Cmd(ctx)
   c.cwd = bld2
-  c.lit('./configure', '--prefix=' + to)
+  c.lit('./configure', '--prefix=' + to, '--with-zlib=' + zlib_dir)
   yield async.WaitFor(c.exec_a())
   
   c = bake.Cmd(ctx)
