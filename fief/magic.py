@@ -1,6 +1,7 @@
 import async
 import bake
 import os
+import shutil
 import tempfile
 
 def fetch_nomemo_a(ctx, pkg):
@@ -20,7 +21,7 @@ def fetch_nomemo_a(ctx, pkg):
     c.lit('tar', 'xzf').inf(ball)
     yield async.WaitFor(c.exec_a())
     
-    lambda cleanup: shutil.rmtree(bld)
+    cleanup = lambda: shutil.rmtree(bld)
     yield async.Result((bld2, cleanup))
   else:
     assert False # invalid source tuple
@@ -29,6 +30,6 @@ def builder_nomemo_a(ctx, pkg):
   """Returns an asynchronous build bake function"""
   repo = ctx['repo']
   script = os.path.join(repo, pkg + '.py')
-  glbs, locs = globals(), {}
-  execfile(script, glbs, locs)
-  return locs['build_a']
+  ns = {}
+  execfile(script, ns, ns)
+  yield async.Result(ns['build_a'])
