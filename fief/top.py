@@ -14,7 +14,7 @@ def top_a(ctx):
   
   # from the deps!
   seen = set()
-  more = set([
+  #more = set([
   
   path = yield async.WaitFor(ctx(bld_a))
   yield async.Result(path)
@@ -22,12 +22,17 @@ def top_a(ctx):
 def main_a():
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
+#    args = {
+#      'pkg': 'hdf5',
+#      'repo': 'repo',
+#      ('source','zlib'): ('tarball','zlib-1.2.7.tar.gz'),
+#      ('source','hdf5'): ('tarball','hdf5-1.8.10-patch1.tar.gz'),
+#      ('feature','hdf5','parallel'): False,
+#    }
     args = {
-      'pkg': 'hdf5',
+      'pkg': 'sympy',
       'repo': 'repo',
-      ('source','zlib'): ('tarball','zlib-1.2.7.tar.gz'),
-      ('source','hdf5'): ('tarball','hdf5-1.8.10-patch1.tar.gz'),
-      ('feature','hdf5','parallel'): False,
+      ('source', 'sympy'): ('tarball', 'sympy-0.7.2.tar.gz'),
     }
     path = yield async.WaitFor(oven.memo_a(top_a, args))
     returncode[0] = 0
