@@ -48,6 +48,9 @@ class Cmd(object):
     me._ctx = ctx
     me._toks = []
     me._oxs = {}
+    me.cwd = None
+    me.showout = False
+    me.showerr = True
   
   def lit(me, *toks):
     me._toks += _flatten(toks)
@@ -77,22 +80,24 @@ class Cmd(object):
     me.shline = subprocess.list2cmdline(me._toks)
     me.outs = me._oxs
   
-  def exec_a(me, showerr=True):
+  def exec_a(me):
     if not hasattr(me, 'shline'):
       yield async.WaitFor(me.prepare_a())
     
     def go():
       pipe = subprocess.PIPE
-      p = subprocess.Popen(me._toks, stdin=pipe, stdout=pipe, stderr=pipe)
+      p = subprocess.Popen(me._toks, cwd=me.cwd, stdin=pipe, stdout=pipe, stderr=pipe)
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
     
-    if showerr:
+    if me.showerr:
       print >> sys.stderr, '[RUN] ' + me.shline
     yield async.WaitFor(go)
     
-    if showerr and me.stderr != '':
+    if me.showerr and me.stderr != '':
       print >> sys.stderr, '-'*72 + '\n[ERR] ' + me.shline + '\n' + me.stderr + ('' if me.stderr[-1] == '\n' else '\n') + '-'*72
+    if me.showout and me.stdout != '':
+      print >> sys.stderr, '-'*72 + '\n[OUT] ' + me.shline + '\n' + me.stdout + ('' if me.stdout[-1] == '\n' else '\n') + '-'*72
     
     if me.returncode != 0:
       raise subprocess.CalledProcessError(me.returncode, me.shline)
