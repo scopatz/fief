@@ -105,6 +105,8 @@ class TaskError(Exception):
     me.traceback = tb
   def reraise(me):
     raise type(me.ex), me.ex, me.traceback
+  def __str__(me):
+    return repr(me.key) + ', ' + str(me.ex)
 
 class Lock(object):
   def __init__(me):

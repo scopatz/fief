@@ -7,36 +7,71 @@ import itertools
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
-  src = ctx['source',pkg]
-  repo = ctx['repo']
+  repo = 'repo'
   
-  if src[0] == 'tarball':
-    ball = os.path.abspath(os.path.join(repo, src[1]))
-    name = os.path.split(ball)[-1].rsplit('.', 2)[0]
+  ball = os.path.abspath(os.path.join(repo, tarballs[pkg]))
+  name = os.path.split(ball)[-1].rsplit('.', 2)[0]
     
-    bld = tempfile.mkdtemp()
-    bld2 = os.path.join(bld, name)
+  bld = tempfile.mkdtemp()
+  bld2 = os.path.join(bld, name)
     
-    c = bake.Cmd(ctx)
-    c.cwd = bld
-    c.lit('tar', 'xzf').inf(ball)
-    yield async.WaitFor(c.exec_a())
+  c = bake.Cmd(ctx)
+  c.cwd = bld
+  c.lit('tar', 'xzf').inf(ball)
+  yield async.WaitFor(c.exec_a())
     
-    cleanup = lambda: shutil.rmtree(bld)
-    yield async.Result((bld2, cleanup))
-  else:
-    assert False # invalid source tuple
+  cleanup = lambda: shutil.rmtree(bld)
+  yield async.Result((bld2, cleanup))
 
-def load_nomemo_a(ctx, pkg):
-  """Returns an asynchronous build bake function"""
-  repo = ctx['repo']
-  script = os.path.join(repo, pkg + '.py')
-  ns = {}
-  execfile(script, ns, ns)
-  yield async.Result((ns['depends_a'], ns['build_a']))
+def load_nomemo(ifc):
+  return builders[ifc2pkg[ifc]]
 
 def merge_lib_deps(*depss):
   seen = set()
   seen_add = seen.add
-  seq = itertools.chain(*depss)
-  return tuple(x for x in seq if x not in seen and not seen_add(x))
+  seq = reverse(itertools.chain(*depss))
+  return reverse(tuple(x for x in seq if x not in seen and not seen_add(x)))
+
+ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
+
+class ifc(object):
+
+  def __init__(self, subsumes=(), requires=(), libs=()):
+    self.subsumes = ensure_frozenset(subsumes)
+    self.requires = ensure_frozenset(requires)
+    self.libs = ensure_frozenset(libs)
+
+def built_dirs_a(ctx, ifcs):
+  """Given interfaces data structure, return built hash directories of all 
+  active requirements."""
+  reqs = set()
+  for key, ifc in ifcs.items(): 
+    if ctx['interface', key]:
+      reqs |= ifc.requires
+  built_dirs = {}
+  for ifc in reqs:
+    bld = load_nomemo(ifc)
+    yield async.Task(ifc, ctx(bld, {'pkg': ifc2pkg[ifc]}))
+  while True:
+    got = yield async.WaitAny
+    if got is None:
+       break
+    built_dirs[got[0]] = got[1][0]
+  yield async.Result(built_dirs)
+
+builders = {}
+tarballs = {}
+interfaces = {}
+ifc2pkg = {}
+
+def init(config):
+  for pkg, (tarball, f) in config.iteritems():
+    ns = {}
+    execfile(os.path.join('repo', f), ns, ns)
+    builders[pkg] = ns['build_a']
+    tarballs[pkg] = tarball
+    interfaces[pkg] = ns['interfaces']
+    for ifc in interfaces[pkg]:
+      assert ifc not in ifc2pkg
+      ifc2pkg[ifc] = pkg
+

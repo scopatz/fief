@@ -2,33 +2,33 @@ import async
 import bake
 import os
 import magic
+from magic import ifc
 
-def depends_a(ctx):
-  yield async.Result({})
+interfaces = {'zlib': ifc(libs='z')}
 
 def build_a(ctx):
-  deps = ctx['deps']
-  src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, 'zlib'))
+  pkg = ctx['pkg']
+  src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))
+  try:  
+    to = yield async.WaitFor(ctx.outfile_a('build'))
+    to = os.path.abspath(to)
+    os.mkdir(to)
   
-  to = yield async.WaitFor(ctx.outfile_a('build'))
-  to = os.path.abspath(to)
-  os.mkdir(to)
+    c = bake.Cmd(ctx)
+    c.cwd = src
+    c.lit('./configure', '--prefix=' + to)
+    yield async.WaitFor(c.exec_a())
   
-  c = bake.Cmd(ctx)
-  c.cwd = src
-  c.lit('./configure', '--prefix=' + to)
-  yield async.WaitFor(c.exec_a())
+    c = bake.Cmd(ctx)
+    c.cwd = src
+    c.lit('make')
+    yield async.WaitFor(c.exec_a())
   
-  c = bake.Cmd(ctx)
-  c.cwd = src
-  c.lit('make')
-  yield async.WaitFor(c.exec_a())
+    c = bake.Cmd(ctx)
+    c.cwd = src
+    c.lit('make', 'install')
+    yield async.WaitFor(c.exec_a())
+  finally:
+    cleanup()
   
-  c = bake.Cmd(ctx)
-  c.cwd = src
-  c.lit('make', 'install')
-  yield async.WaitFor(c.exec_a())
-  
-  cleanup()
-  
-  yield async.Result(to)
+  yield async.Result((to, ('z',)))

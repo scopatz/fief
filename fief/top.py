@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import async
 import bake
 import subprocess
@@ -10,37 +11,38 @@ returncode = [None]
 
 def top_a(ctx):
   pkg = ctx['pkg']
-  dep_a, bld_a = yield async.WaitFor(magic.load_nomemo_a(ctx, pkg))
-  
-  # from the deps!
-  seen = set()
-  #more = set([
-  
-  path = yield async.WaitFor(ctx(bld_a))
-  yield async.Result(path)
+  path, libs = yield async.WaitFor(ctx(magic.builders[pkg]))
+  yield async.Result((path, libs))
+
+config = {
+  'zlib': ('zlib-1.2.7.tar.gz', 'zlib.py'), 
+  'hdf5': ('hdf5-1.8.10-patch1.tar.gz', 'hdf5.py'), 
+  }
 
 def main_a():
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
 #    args = {
-#      'pkg': 'hdf5',
-#      'repo': 'repo',
-#      ('source','zlib'): ('tarball','zlib-1.2.7.tar.gz'),
-#      ('source','hdf5'): ('tarball','hdf5-1.8.10-patch1.tar.gz'),
-#      ('feature','hdf5','parallel'): False,
+#      'pkg': 'zlib',
+#      ('interface','zlib'): True,
 #    }
     args = {
-      'pkg': 'sympy',
-      'repo': 'repo',
-      ('source', 'sympy'): ('tarball', 'sympy-0.7.2.tar.gz'),
+      'pkg': 'hdf5',
+      ('interface','hdf5'): True,
     }
-    path = yield async.WaitFor(oven.memo_a(top_a, args))
+#    args = {
+#      'pkg': 'sympy',
+#      'repo': 'repo',
+#      ('source', 'sympy'): ('tarball', 'sympy-0.7.2.tar.gz'),
+#    }
+    tup = yield async.WaitFor(oven.memo_a(top_a, args))
     returncode[0] = 0
-    sys.stdout.write(path)
+    print(tup)
   except subprocess.CalledProcessError, e:
     returncode[0] = e.returncode
   
   yield async.WaitFor(oven.close_a())
 
+magic.init(config)
 async.run(main_a())
 exit(returncode[0])
