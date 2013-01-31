@@ -5,7 +5,7 @@ import magic
 
 ifc = magic.ifc
 
-interfaces = {'sympy': ifc()}
+interfaces = {'numpy': ifc()}
 
 def build_a(ctx):
     pkg = ctx['pkg']
@@ -22,4 +22,4 @@ def build_a(ctx):
   
     cleanup()
   
-    yield async.Result(to)
+    yield async.Result((to, ()))
