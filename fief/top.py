@@ -17,19 +17,24 @@ def top_a(ctx):
 config = {
   'zlib': ('zlib-1.2.7.tar.gz', 'zlib.py'), 
   'hdf5': ('hdf5-1.8.10-patch1.tar.gz', 'hdf5.py'), 
+  'mpich3': ('mpich-3.0.1.tar.gz', 'mpich.py'), 
   }
 
 def main_a():
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
-#    args = {
-#      'pkg': 'zlib',
-#      ('interface','zlib'): True,
-#    }
+    # args = {
+    #   'pkg': 'zlib',
+    #   ('interface','zlib'): True,
+    #   }
     args = {
-      'pkg': 'hdf5',
-      ('interface','hdf5'): True,
-    }
+      'pkg': 'mpich3',
+      ('interface','mpi3'): True,
+      }
+    # args = {
+    #   'pkg': 'hdf5',
+    #   ('interface','hdf5'): True,
+    # }
 #    args = {
 #      'pkg': 'sympy',
 #      'repo': 'repo',
