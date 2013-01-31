@@ -19,7 +19,8 @@ config = {
   'hdf5': ('hdf5-1.8.10-patch1.tar.gz', 'hdf5.py'), 
   'mpich3': ('mpich-3.0.1.tar.gz', 'mpich.py'), 
   'cython': ('Cython-0.18.tar.gz', 'cython.py'), 
-  'numpy': ('numpy-1.7.0rc1.tar.gz', 'numpy.py')
+  'numpy': ('numpy-1.7.0rc1.tar.gz', 'numpy.py'),
+  'atlas': ('atlas3.10.1.tar.bz2', 'atlas.py')
   }
 
 def main_a():

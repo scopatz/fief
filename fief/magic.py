@@ -11,15 +11,22 @@ def fetch_nomemo_a(ctx, pkg):
   
   ball = os.path.abspath(os.path.join(repo, tarballs[pkg]))
   name = os.path.split(ball)[-1].rsplit('.', 2)[0]
-    
   bld = tempfile.mkdtemp()
-  bld2 = os.path.join(bld, name)
     
   c = bake.Cmd(ctx)
   c.cwd = bld
-  c.lit('tar', 'xzf').inf(ball)
+  if ball.endswith('.tar.gz'):
+    c.lit('tar', 'xzf').inf(ball)
+  elif ball.endswith('.tar.bz2'):
+    c.lit('tar', 'xjf').inf(ball)
   yield async.WaitFor(c.exec_a())
-    
+
+  bld2 = os.path.join(bld, name)
+  if not os.path.exists(bld2):
+    unzipped = os.listdir(bld)
+    if 1 == len(unzipped):
+      bld2 = os.path.join(bld, unzipped[0]) 
+
   cleanup = lambda: shutil.rmtree(bld)
   yield async.Result((bld2, cleanup))
 
