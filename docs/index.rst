@@ -9,7 +9,9 @@ Welcome to fief's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 1
+
+    devteam
 
 
 
