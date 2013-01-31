@@ -28,9 +28,10 @@ def build_a(ctx):
   
     c = bake.Cmd(ctx)
     c.cwd = src
+    c.env = {'PATH': os.path.join(mpi_dir,'bin')+os.pathsep+os.getenv('PATH',"")}
     c.lit('./configure', '--prefix=' + to)\
       .lit('--with-zlib=' + zlib_dir)\
-      .lit(() if mpi_dir is None else ('--with-mpi=' + mpi_dir))
+      .lit(() if mpi_dir is None else ('--enable-parallel'))
     yield async.WaitFor(c.exec_a())
   
     c = bake.Cmd(ctx)
