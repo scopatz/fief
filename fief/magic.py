@@ -45,7 +45,10 @@ def requirements(reqs,ctx,ifcs):
   """given interfaces data structure, recursively adds interface 
   requirements."""
   
-  on_
+  on_ifcs = dict([key for key in ifcs if ctx['interface',key]])
+
+  for key in on_ifcs:
+    reqs |= ifcs
 
   for key, ifc in ifcs.items(): 
     if ctx['interface', key]:
@@ -69,7 +72,7 @@ def built_dirs_a(ctx, ifcs):
   while True:
     got = yield async.WaitAny
     if got is None:
-       break
+      break
     built_dirs[got[0]] = got[1][0]
   yield async.Result(built_dirs)
 
