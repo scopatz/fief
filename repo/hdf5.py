@@ -8,7 +8,7 @@ ifc = magic.ifc
 interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')), 
               'hdf5-cpp': ifc(subsumes='hdf5', libs=('hdf5_cpp', 'hdf5_hl_cpp')), 
               'hdf5-mp3': ifc(subsumes='hdf5', requires='ffmpeg'), 
-              'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2'),
+              'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi3'),
               }
 
 def build_a(ctx):
@@ -16,13 +16,11 @@ def build_a(ctx):
   src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))
 
   try:
-    parl = ctx['feature','hdf5','parallel']
+    parl = ctx['interface','hdf5-parallel']
     paths = yield async.WaitFor(magic.built_dirs_a(ctx, interfaces))
     zlib_dir = paths['zlib']
   
-    mpi_dir = None
-    #if parl:
-    #  mpi_dir = yield async.WaitFor(ctx(build_mpi.build_mpi_a))
+    mpi_dir = paths['mpi3'] if parl else None
   
     to = yield async.WaitFor(ctx.outfile_a('build'))
     to = os.path.abspath(to)

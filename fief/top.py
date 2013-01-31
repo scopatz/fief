@@ -27,14 +27,14 @@ def main_a():
     #   'pkg': 'zlib',
     #   ('interface','zlib'): True,
     #   }
-    args = {
-      'pkg': 'mpich3',
-      ('interface','mpi3'): True,
-      }
     # args = {
-    #   'pkg': 'hdf5',
-    #   ('interface','hdf5'): True,
-    # }
+    #   'pkg': 'mpich3',
+    #   ('interface','mpi3'): True,
+    #   }
+    args = {
+      'pkg': 'hdf5',
+      ('interface','hdf5-parallel'): True,
+    }
 #    args = {
 #      'pkg': 'sympy',
 #      'repo': 'repo',
