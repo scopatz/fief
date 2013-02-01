@@ -22,7 +22,7 @@ def main(args=None):
     ns = parser.parse_args(args)
     if hasattr(ns, 'options'):
         ns.options = ns.options[1:] if ['--'] == ns.options[:1] else ns.options
-    if "conf" not in ns:
+    if ns.conf is None:
         for conffile in CONFIGS:
             if os.path.isfile(conffile):
                 ns.conf = conffile
@@ -31,7 +31,7 @@ def main(args=None):
     # open run-control file, if present
     conf = {}
     if os.path.isfile(ns.conf):
-        execfile(ns.conf, {}, conf)
+        execfile(ns.conf, conf, conf)
 
     # Run the fief command, use dynamic import
     if '.' not in sys.path:
@@ -82,7 +82,7 @@ def _make_argparser():
     add_conf    = lambda p: p.add_argument('--conf', type=str, dest='conf', 
                                            required=False,
                                            help='configuration file path', 
-                                           default=CONFIGS[0])
+                                           default=None)
 
     # add build command
     cmds.add('realize')

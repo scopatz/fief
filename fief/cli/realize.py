@@ -9,7 +9,8 @@ USAGE = ("Realizes a fief active set."
 def main(ns, conf):
     """Realizes a fief active set."""
     repo = {}
+    print "conf = ", conf
     execfile(os.path.join('repo', '__repo__.py'), repo, repo)
     magic.init(repo['packages'])
-    async.run(top.main_a())
+    async.run(top.main_a(conf.get('interfaces', [])))
     exit(top.returncode[0])

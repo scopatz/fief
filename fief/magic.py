@@ -48,12 +48,12 @@ class ifc(object):
     self.requires = ensure_frozenset(requires)
     self.libs = ensure_frozenset(libs)
 
-def requirements(reqs,on_ifcs,ifcs):
+def requirements(reqs, activated, ifcs):
   """given interfaces data structure, recursively adds interface 
   requirements."""  
-  for key in on_ifcs:
-    reqs |= ifcs[key].requires
-    requirements(reqs,ifcs[key].subsumes,ifcs)
+  for act in activated:
+    reqs |= ifcs[act].requires
+    requirements(reqs, ifcs[act].subsumes,ifcs)
 
 def built_dirs_a(ctx, ifcs):
   """Given interfaces data structure, return built hash directories of all 
