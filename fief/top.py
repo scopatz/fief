@@ -20,7 +20,7 @@ def main_a(activated):
   reqs = set()
   for act in activated:
     args['interface', act] = True
-    requirements(reqs, activated, magic.interfaces[act])
+    magic.requirements(reqs, activated, magic.interfaces[act])
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
     tup = yield async.WaitFor(oven.memo_a(top_a, args))
