@@ -2,14 +2,14 @@
  
 from distutils.core import setup
 
-setup(name="fist",
+setup(name="fief",
 	version='0.1-dev',
-	description='The fist package manager',
+	description='The fief package manager',
 	author='John Bachan, Anthony Scopatz',
 	author_email='john.bachan@gmail.com, scopatz@gmail.com',
-	url='https://github.com/scopatz/fist',
-	packages=['fist',],
-	package_dir={'fist': 'fist'}, 
-    scripts=['scripts/fist'],
+	url='https://github.com/scopatz/fief',
+	packages=['fief',],
+	package_dir={'fief': 'fief'}, 
+    scripts=[os.path.join('bin', 'fief'), os.path.join('bin', 'fief.bat')],
 	)
 
