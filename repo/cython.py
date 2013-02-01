@@ -1,7 +1,7 @@
-import async
-import bake
 import os
-import magic
+from fief import async
+from fief import bake
+from fief import magic
 
 ifc = magic.ifc
 

@@ -34,7 +34,6 @@ def main(args=None):
     # Run the fief command, use dynamic import
     if '.' not in sys.path:
         sys.path.insert(0, '.')
-    cmdmod, mainfunc = commands[ns.cmd]
     cmdmod = __import__(ns.cmd, globals(), locals(), fromlist=[None])
     mainfunc = getattr(cmdmod, 'main')
     rtn = mainfunc(ns, conf)
@@ -57,7 +56,6 @@ def _make_argparser():
     subparsers = parser.add_subparsers(title='subcommands',
                                        description='valid subcommands',
                                        dest="cmd",
-                                       default="realize",
                                        help='sub-command help')
 
     # convenience addition functions
@@ -90,7 +88,7 @@ def _make_argparser():
     add_conf(subparser)
 
     # add default parser for remaining commands
-    for key in set(commands.keys()) - cmds:
+    for key in set(commands) - cmds:
         subparser = subparsers.add_parser(key)
         add_rc(subparser)
         add_options(subparser)

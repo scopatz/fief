@@ -17,10 +17,10 @@ def top_a(ctx):
 def main_a():
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
-    # args = {
-    #   'pkg': 'zlib',
-    #   ('interface','zlib'): True,
-    #   }
+    args = {
+       'pkg': 'zlib',
+       ('interface','zlib'): True,
+       }
     # args = {
     #   'pkg': 'mpich3',
     #   ('interface','mpi3'): True,
@@ -33,10 +33,10 @@ def main_a():
 #      'pkg': 'cython',
 #      ('interface','cython'): True,
 #    }
-    args = {
-      'pkg': 'numpy',
-      ('interface','numpy'): True,
-    }
+#    args = {
+#      'pkg': 'numpy',
+#      ('interface','numpy'): True,
+#    }
 #    args = {
 #      'pkg': 'sympy',
 #      'repo': 'repo',

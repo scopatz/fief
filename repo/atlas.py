@@ -1,8 +1,6 @@
-import async
-import bake
 import os
-import magic
-from magic import ifc
+from fief import magic
+from fief.magic import ifc, async, bake
 
 interfaces = {'atlas': ifc(libs='atlas')}
 

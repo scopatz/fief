@@ -1,9 +1,6 @@
-import async
-import bake
 import os
-import magic
-
-ifc = magic.ifc
+from fief import magic
+from fief.magic import ifc, async, bake
 
 interfaces = {'numpy': ifc(requires='atlas')}
 

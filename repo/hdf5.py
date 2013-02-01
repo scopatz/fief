@@ -1,9 +1,6 @@
-import async
-import bake
 import os
-import magic
-
-ifc = magic.ifc
+from fief import magic
+from fief.magic import ifc, async, bake
 
 interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')), 
               'hdf5-cpp': ifc(subsumes='hdf5', libs=('hdf5_cpp', 'hdf5_hl_cpp')), 
