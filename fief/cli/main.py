@@ -95,3 +95,7 @@ def _make_argparser():
         add_rc(subparser)
         add_options(subparser)
     return parser
+
+
+if __name__ == '__main__':
+    main()

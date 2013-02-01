@@ -1,6 +1,13 @@
 #! /usr/bin/env python
 
-from fief.cli.main import main
+try:
+    from fief.cli.main import main
+except ImportError:
+    import os
+    import sys
+    fief_base_dir = os.path.split(os.path.split(__file__)[0])[0]
+    sys.path.insert(0, fief_base_dir)
+    from fief.cli.main import main    
 
 if __name__ == '__main__':
     main()
