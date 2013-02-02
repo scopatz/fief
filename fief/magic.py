@@ -60,7 +60,7 @@ def requirements(reqs, activated):
     reqs |= ifc.requires
     requirements(reqs, ifc.subsumes)
 
-def built_dirs_a(ctx, ifx):
+def build_deps_a(ctx, ifx):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
   activated = [key for key in ifc2pkg if ctx['interface',key]]
@@ -85,9 +85,8 @@ def built_dirs_a(ctx, ifx):
 
 builders = {}
 tarballs = {}
-interfaces = {}
-ifc2pkg = {}
-pkg2ifc = {}
+pkginterfaces = {}
+ifcpkg = []
 
 def init(config):
   for pkg, (tarball, f) in config.iteritems():
@@ -95,9 +94,7 @@ def init(config):
     execfile(os.path.join('repo', f), ns, ns)
     builders[pkg] = ns['build_a']
     tarballs[pkg] = tarball
-    interfaces[pkg] = ns['interfaces']
-    for ifc in interfaces[pkg]:
-      assert ifc not in ifc2pkg
-      ifc2pkg[ifc] = pkg
-      pkg2ifc[ifc] = pkg
+    pkginterfaces[pkg] = ns['interfaces']
+    for ifc in pkginterfaces[pkg]:
+      ifcpkg.append((ifc, pkg))
 

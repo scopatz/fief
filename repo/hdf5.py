@@ -14,7 +14,7 @@ def build_a(ctx):
 
   try:
     parl = ctx['interface','hdf5-parallel']
-    paths = yield async.WaitFor(magic.built_dirs_a(ctx, interfaces))
+    paths = yield async.WaitFor(magic.build_deps_a(ctx, interfaces))
     zlib_dir = paths['zlib']
   
     mpi_dir = paths['mpi3'] if parl else None
