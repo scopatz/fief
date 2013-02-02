@@ -18,14 +18,21 @@ def top_a(ctx):
 def main_a(activated):
   args = {}
   reqs = set()
+  pkgs = set()
   for act in activated:
     args['interface', act] = True
     magic.requirements(reqs, activated, magic.interfaces[act])
+    pkgs.add(magic.ifc2pkg[act])
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
-    tup = yield async.WaitFor(oven.memo_a(top_a, args))
+    pathlibs = []
+    for pkg in pkgs:
+      pkgargs = {'pkg': pkg}
+      pkgargs.update(dict(args))
+      pathlib = yield async.WaitFor(oven.memo_a(top_a, pkgargs))
+      pathlibs.append(pathlib)
     returncode[0] = 0
-    print(tup)
+    print(pathlibs)
   except subprocess.CalledProcessError, e:
     returncode[0] = e.returncode
   

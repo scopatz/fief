@@ -50,19 +50,19 @@ class ifc(object):
 
 def requirements(reqs, activated, ifcs):
   """given interfaces data structure, recursively adds interface 
-  requirements."""  
+  requirements."""
   for act in activated:
     reqs |= ifcs[act].requires
     requirements(reqs, ifcs[act].subsumes,ifcs)
 
-def built_dirs_a(ctx, ifcs):
+def built_dirs_a(ctx, ifx):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
-  on_ifcs = [key for key in ifcs if ctx['interface',key]]
-  reqs = set()
-  requirements(reqs,on_ifcs,ifcs)
+  activated = [key for key in ifx if ctx['interface',key]]
+  pkgs = set([ifc2pkg[ifc] for ifc in activated])
+  activated = [interfaces[pkg] for pkg in pkgs]
   built_dirs = {}
-  for ifc in reqs:
+  for ifc in activated:
     bld = load_nomemo(ifc)
     yield async.Task(ifc, ctx(bld, {'pkg': ifc2pkg[ifc]}))
   while True:
