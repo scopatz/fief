@@ -68,14 +68,17 @@ def _make_argparser():
     add_source  = lambda p: p.add_argument('src', type=str, help='source file or dir')
     add_destin  = lambda p: p.add_argument('dst', type=str, 
                                            help='destination file or dir')
-    add_options = lambda p: p.add_argument('options', type=str, 
-                                           nargs=argparse.REMAINDER, 
-                                           help='build command to execute')
-
-    add_conf    = lambda p: p.add_argument('--conf', type=str, dest='conf', 
-                                           required=False,
-                                           help='configuration file path', 
-                                           default='<conf-file>')
+    add_activate = lambda p: p.add_argument('-a', '--activate', type=str, nargs='+',
+                                           metavar='ifc', dest='activate',
+                                           help='additional interfaces to activate')
+    add_deactivate = lambda p: p.add_argument('-d', '--deactivate', type=str, 
+                                              nargs='+', metavar='ifc', 
+                                              dest='deactivate',
+                                              help='interfaces to deactivate')
+    add_conf = lambda p: p.add_argument('--conf', type=str, dest='conf', 
+                                        required=False,
+                                        help='configuration file path', 
+                                        default='<conf-file>')
     add_verbose = lambda p: p.add_argument('-v', '--verbose', 
                                            dest='verbose', action='store_true',
                                            help='show more information', default=False)
@@ -85,12 +88,13 @@ def _make_argparser():
     subparser = subparsers.add_parser('realize')
     add_conf(subparser)
     add_verbose(subparser)
+    add_activate(subparser)
+    add_deactivate(subparser)
 
     # add default parser for remaining commands
     for key in set(commands) - cmds:
         subparser = subparsers.add_parser(key)
-        add_rc(subparser)
-        add_options(subparser)
+        add_conf(subparser)
     return parser
 
 

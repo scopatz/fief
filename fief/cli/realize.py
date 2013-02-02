@@ -13,5 +13,8 @@ def main(ns, conf):
     magic.Cmd.showout = ns.verbose
     magic.init(repo['packages'])
     magic.preferences.update(repo.get('preferencs', ()))
-    async.run(top.main_a(conf.get('interfaces', [])))
+    activated = set(conf.get('interfaces', []))
+    activated |= set(ns.activate or ())
+    activated -= set(ns.deactivate or ())
+    async.run(top.main_a(activated))
     exit(top.returncode[0])
