@@ -48,22 +48,33 @@ class ifc(object):
     self.requires = ensure_frozenset(requires)
     self.libs = ensure_frozenset(libs)
 
-def requirements(reqs, activated, ifcs):
+  def __repr__(self):
+    s = "ifc(subsumes={0!r}, requires={1!r}, libs={2!r})"
+    return s.format(self.subsumes, self.requires, self.libs)
+
+def requirements(reqs, activated):
   """given interfaces data structure, recursively adds interface 
   requirements."""
   for act in activated:
-    reqs |= ifcs[act].requires
-    requirements(reqs, ifcs[act].subsumes,ifcs)
+    ifc = interfaces[ifc2pkg[act]][act]
+    reqs |= ifc.requires
+    requirements(reqs, ifc.subsumes)
 
 def built_dirs_a(ctx, ifx):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
-  activated = [key for key in ifx if ctx['interface',key]]
+  activated = [key for key in ifc2pkg if ctx['interface',key]]
+  #activated = [key for key in ifx if ctx['interface',key]]
+  print activated
   pkgs = set([ifc2pkg[ifc] for ifc in activated])
+  print pkgs
   activated = [pkg2ifc[pkg] for pkg in pkgs]
+  print activated
   built_dirs = {}
   for ifc in activated:
+    print ifc
     bld = load_nomemo(ifc)
+    print bld
     yield async.Task(ifc, ctx(bld, {'pkg': ifc2pkg[ifc]}))
   while True:
     got = yield async.WaitAny

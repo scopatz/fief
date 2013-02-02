@@ -21,7 +21,7 @@ def main_a(activated):
   pkgs = set()
   for act in activated:
     args['interface', act] = True
-    magic.requirements(reqs, activated, magic.interfaces[act])
+    magic.requirements(reqs, activated)
     pkgs.add(magic.ifc2pkg[act])
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
