@@ -57,9 +57,6 @@ def _make_argparser():
                                        help='sub-command help')
 
     # convenience addition functions
-    add_message = lambda p: p.add_argument('-m', metavar="MESSAGE", default=None, 
-                                           type=str, help='message to log', 
-                                           required=False, dest="message")
     add_dry_run = lambda p: p.add_argument('--dry-run', default=False, 
                                            action='store_true', 
                                            help='simulates running this command', 
@@ -79,11 +76,15 @@ def _make_argparser():
                                            required=False,
                                            help='configuration file path', 
                                            default='<conf-file>')
+    add_verbose = lambda p: p.add_argument('-v', '--verbose', 
+                                           dest='verbose', action='store_true',
+                                           help='show more information', default=False)
 
     # add build command
     cmds.add('realize')
     subparser = subparsers.add_parser('realize')
     add_conf(subparser)
+    add_verbose(subparser)
 
     # add default parser for remaining commands
     for key in set(commands) - cmds:

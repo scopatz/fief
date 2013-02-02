@@ -1,7 +1,7 @@
 import os
 import sys
 from fief import magic
-from fief.magic import ifc, async, bake
+from fief.magic import ifc, async, Cmd
 
 interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')), 
               'hdf5-cpp': ifc(subsumes='hdf5', libs=('hdf5_cpp', 'hdf5_hl_cpp')), 
@@ -23,7 +23,7 @@ def build_a(ctx):
     to = os.path.abspath(to)
     os.mkdir(to)
   
-    c = bake.Cmd(ctx)
+    c = Cmd(ctx)
     c.cwd = src
     c.lit('./configure', '--prefix=' + to)\
       .lit('--with-zlib=' + zlib_dir)
@@ -33,12 +33,12 @@ def build_a(ctx):
       c.env = {'PATH': newpath}
     yield async.WaitFor(c.exec_a())
   
-    c = bake.Cmd(ctx)
+    c = Cmd(ctx)
     c.cwd = src
     c.lit('make', '-j')
     yield async.WaitFor(c.exec_a())
   
-    c = bake.Cmd(ctx)
+    c = Cmd(ctx)
     c.cwd = src
     c.lit('make', 'install')
     yield async.WaitFor(c.exec_a())

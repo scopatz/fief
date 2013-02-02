@@ -121,3 +121,14 @@ def init(config):
     for ifc in pkginterfaces[pkg]:
       ifcpkg.append((ifc, pkg))
 
+
+class Cmd(bake.Cmd):
+  """Proxy class for bake Cmd, to enable globally setting showout & showerr."""
+
+  showout = False
+  showerr = True
+  
+  def __init__(me, *args, **kwargs):
+    super(Cmd, me).__init__(*args, **kwargs)
+    me.showout = Cmd.showout
+    me.showerr = Cmd.showerr

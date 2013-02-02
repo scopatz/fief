@@ -1,6 +1,6 @@
 import os
 from fief import magic
-from fief.magic import ifc, async, bake
+from fief.magic import ifc, async, Cmd
 
 interfaces = {'zlib': ifc(libs='z')}
 
@@ -11,18 +11,18 @@ def build_a(ctx):
     to = yield async.WaitFor(ctx.outfile_a('build'))
     to = os.path.abspath(to)
     os.mkdir(to)
-  
-    c = bake.Cmd(ctx)
+
+    c = Cmd(ctx)
     c.cwd = src
     c.lit('./configure', '--prefix=' + to)
     yield async.WaitFor(c.exec_a())
   
-    c = bake.Cmd(ctx)
+    c = Cmd(ctx)
     c.cwd = src
     c.lit('make')
     yield async.WaitFor(c.exec_a())
   
-    c = bake.Cmd(ctx)
+    c = Cmd(ctx)
     c.cwd = src
     c.lit('make', 'install')
     yield async.WaitFor(c.exec_a())
