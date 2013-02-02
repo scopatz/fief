@@ -11,5 +11,6 @@ def main(ns, conf):
     repo = {}
     execfile(os.path.join('repo', '__repo__.py'), repo, repo)
     magic.init(repo['packages'])
+    magic.preferences.update(repo.get('preferencs', ()))
     async.run(top.main_a(conf.get('interfaces', [])))
     exit(top.returncode[0])

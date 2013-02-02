@@ -8,6 +8,8 @@ import async
 import bake
 import magic
 
+from pprint import pprint
+
 returncode = [None]
 
 def top_a(ctx):
@@ -21,10 +23,12 @@ def main_a(activated):
   pkgs = set()
   for act in activated:
     reqs |= magic.requirements(act)
-  print reqs
+  ifc2pkg = magic.packages(reqs)
   for ifc in reqs:
-    args['interface', ifc] = True
-    #pkgs.add(magic.ifc2pkg[act])
+    pkg = ifc2pkg[ifc]
+    args['interface', ifc] = pkg
+    pkgs.add(pkg)
+  pprint(args)
   exit(0)
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:

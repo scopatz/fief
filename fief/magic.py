@@ -64,6 +64,27 @@ def requirements(act):
         reqs |= requirements(subs)
   return reqs
 
+def packages(activated):
+  """Computes unique package names that implement the activated interfaces."""
+  ifc2pkg = {}
+  for act in activated:
+    pkgs = [pkg for ifc, pkg in ifcpkg if ifc == act]
+    pkgslen = len(pkgs)
+    if 1 == pkgslen:
+      ifc2pkg[act] = pkgs[0]
+    elif 1 < pkgslen:
+      pref = preferences.get(act, None)
+      if pref in pkgs:
+        ifc2pkg[act] = pref
+      else:
+        msg = ("multiple packages implement the {0} interface!\n"
+               "Please select a preference from the following:\n{1}")
+        raise LookupError(msg.format(act, "\n".join(sorted(pkgs))))
+    elif 0 == pkgs:
+      msg = "no package implements the {0} interface!"
+      raise LookupError(msg.format(act))
+  return ifc2pkg
+
 def build_deps_a(ctx, ifx):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
@@ -91,6 +112,7 @@ builders = {}
 tarballs = {}
 pkginterfaces = {}
 ifcpkg = []
+preferences = {}
 
 def init(config):
   for pkg, (tarball, f) in config.iteritems():
