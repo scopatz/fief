@@ -3,6 +3,7 @@ import array
 import binascii
 import hashlib
 import os
+import shutil
 import sqlite3
 import struct
 import subprocess
@@ -210,6 +211,7 @@ class Oven(object):
     me._dbcxn = None
     me._dbpath = os.path.join(path, "db")
     me._dbaff = ("sqlite3", me._dbpath)
+    me._dbtabs = set()
     me._logdb = _LogDb(me)
   
   def _dbjob(me, job):
@@ -217,7 +219,11 @@ class Oven(object):
       if me._dbcxn is None:
         _ensure_dirs(me._dbpath)
         me._dbcxn = sqlite3.connect(me._dbpath)
-      return job(me._dbcxn)
+      def ensure_table(name, cols, ixs=()):
+        if name not in me._dbtabs:
+          me._dbtabs.add(name)
+          _sql_ensure_table(me._dbcxn, name, cols, ixs)
+      return job(me._dbcxn, ensure_table)
     return wrap
   
   def _Task_db(me, key, job):
@@ -237,16 +243,38 @@ class Oven(object):
   def query_a(me, keys):
     return me._host_a(keys, _Stash(me))
   
+  def _outfile_a(me, path):
+    def bump(cxn, ensure_table):
+      ensure_table('outdirs', ('path','bump'), [['path']])
+      cur = cxn.cursor()
+      cur.execute('select bump from outdirs where path=?', (path,))
+      got = cur.fetchone()
+      if got is None:
+        got = 0
+        cur.execute('insert into outdirs(path,bump) values(?,?)', (path,got+1))
+      else:
+        got = got[0]
+        cur.execute('update outdirs set bump=? where path=?', (got+1,path))
+      return got
+    
+    n = yield me._WaitFor_db(bump)
+    o = os.path.join(me._path, 'o', path, str(n))
+    assert not os.path.exists(o)
+    _ensure_dirs(o)
+    yield async.Result(o)
+  
   def _memo_a(me, par, fun_a, argmap):
     def calc_a(log):
       ctx = _Context(me, par, argmap, log)
       try:
         result = yield async.WaitFor(fun_a(ctx))
-      except Exception, e:
-        tb = sys.exc_traceback
-        yield async.WaitFor(ctx._flush_a())
-        raise type(e), e, tb # change to try/finally
-      yield async.WaitFor(ctx._flush_a())
+      except:
+        for o in ctx._outfs:
+          if os.path.exists(o):
+            shutil.rmtree(o)
+        raise
+      finally:
+        yield async.WaitFor(ctx._flush_a())        
       yield async.Result(result)
     
     funval = valtool.Hasher().eat(fun_a).digest()
@@ -269,8 +297,8 @@ class _Stash(object):
   
   def updates_a(me, keys, action):
     size_i = struct.calcsize('<i')
-    def go(cxn):
-      _sql_ensure_table(cxn, 'stash', ('hk0','hk1','val'), [['hk0']])
+    def go(cxn, ensure_table):
+      ensure_table('stash', ('hk0','hk1','val'), [['hk0']])
       try:
         cur = cxn.cursor()
         ans = {}
@@ -340,16 +368,13 @@ class _Context(_View):
     me._inpset = set()
     me._inphold = []
     me._argset = set()
-    
+    me._outfs = []
+  
   def input(me, key):
     if key not in me._inpset and not me._is_outfile(key):
       me._inpset.add(key)
       me._inphold.append(key)
     return key
-  
-  def digest_a(me):
-    yield async.WaitFor(me._flush_a())
-    yield async.Result(me._log.digest())
   
   def _is_outfile(me, path):
     o = os.path.join(os.path.realpath(me._oven._path), 'o')
@@ -357,10 +382,8 @@ class _Context(_View):
     return p.startswith(o + os.path.sep) # ugly, should use os.path.samefile
   
   def outfile_a(me, path):
-    yield async.WaitFor(me._flush_a())
-    dig = _bin2hex(me._log.digest())
-    o = os.path.join(me._oven._path, 'o', path, dig)
-    _ensure_dirs(o)
+    o = yield async.WaitFor(me._oven._outfile_a(path))
+    me._outfs.append(o)
     yield async.Result(o)
   
   def __getitem__(me, x):
@@ -402,7 +425,6 @@ _tag_arg = 2
 class _Log(object):
   def __init__(me, funval):
     object.__init__(me)
-    me._h = valtool.Hasher().raw(funval)
     me._vals = [funval]
     me._tags = []
     me._keys = []
@@ -415,12 +437,8 @@ class _Log(object):
     me._tags.append(tag)
     me._keys.append(key)
     me._vals.append(val)
-    me._h.raw(str(tag)).eat(key).eat(val)
     me._bar.fireall()
   
-  def digest(me):
-    return me._h.digest()
-
   def finish(me, result):
     assert len(me._tags) == 0 or me._tags[-1] != _tag_done
     me._tags.append(_tag_done)
@@ -456,15 +474,12 @@ class _LogDb(object):
     me._oven = oven
     me._lock = async.Lock()
     me._wips = set() # set(_Log) -- work-in-progress
-    me._sqlinit = False
     me._valenc = {}
     me._valdec = {}
   
-  def _ensure_schema(me, cxn):
-    if not me._sqlinit:
-      me._sqlinit = True
-      _sql_ensure_table(cxn, 'logtrie', ('par','val_a','val_b','tagkey'), [['par','val_a']])
-      _sql_ensure_table(cxn, 'valbag', ('val','hash'), [['hash']])
+  def _ensure_schema(me, ensure_table):
+    ensure_table('logtrie', ('par','val_a','val_b','tagkey'), [['par','val_a']])
+    ensure_table('valbag', ('val','hash'), [['hash']])
   
   def _encode_val(me, cxn, val):
     h = valtool.Hasher().eat(val).digest()
@@ -559,8 +574,8 @@ class _LogDb(object):
       else:
         return valtool.unpack(b)
     
-    def step(cxn, par, partag, val):
-      me._ensure_schema(cxn)
+    def step(cxn, enstab, par, partag, val):
+      me._ensure_schema(enstab)
       cur = cxn.cursor()
       val_a, val_b = split_val(partag, val)
       cur.execute(
@@ -578,7 +593,7 @@ class _LogDb(object):
     tag, key = -1, None
     log = _Log(funval) # rebuild as we traverse trie
     while True:
-      got = yield me._oven._WaitFor_db(lambda cxn: step(cxn, par, tag, val))
+      got = yield me._oven._WaitFor_db(lambda cxn, enstab: step(cxn, enstab, par, tag, val))
       if got is None:
         #print >> sys.stderr, 'FAILED', tag, key, repr(val)
         log = None
@@ -605,8 +620,8 @@ class _LogDb(object):
         log.explode(e, sys.exc_traceback)
       
       # done computing, put in cache
-      def insert(cxn, log):
-        me._ensure_schema(cxn)
+      def insert(cxn, enstab, log):
+        me._ensure_schema(enstab)
         try:
           cur = cxn.cursor()
           ixs = range(len(log._tags))
@@ -658,7 +673,7 @@ class _LogDb(object):
       yield async.WaitFor(me._lock.acquire_a())
       me._wips.discard(log)
       if log.error() is None:
-        yield me._oven._WaitFor_db(lambda cxn: insert(cxn, log))
+        yield me._oven._WaitFor_db(lambda cxn, enstab: insert(cxn, enstab, log))
       me._lock.release(False)
     
     yield async.Result(log)
