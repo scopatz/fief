@@ -60,7 +60,7 @@ def built_dirs_a(ctx, ifx):
   active requirements."""
   activated = [key for key in ifx if ctx['interface',key]]
   pkgs = set([ifc2pkg[ifc] for ifc in activated])
-  activated = [interfaces[pkg] for pkg in pkgs]
+  activated = [pkg2ifc[pkg] for pkg in pkgs]
   built_dirs = {}
   for ifc in activated:
     bld = load_nomemo(ifc)
@@ -76,6 +76,7 @@ builders = {}
 tarballs = {}
 interfaces = {}
 ifc2pkg = {}
+pkg2ifc = {}
 
 def init(config):
   for pkg, (tarball, f) in config.iteritems():
@@ -87,4 +88,5 @@ def init(config):
     for ifc in interfaces[pkg]:
       assert ifc not in ifc2pkg
       ifc2pkg[ifc] = pkg
+      pkg2ifc[ifc] = pkg
 
