@@ -30,9 +30,6 @@ def fetch_nomemo_a(ctx, pkg):
   cleanup = lambda: shutil.rmtree(bld)
   yield async.Result((bld2, cleanup))
 
-def load_nomemo(ifc):
-  return builders[ifc2pkg[ifc]]
-
 def merge_lib_deps(*depss):
   seen = set()
   seen_add = seen.add
@@ -85,22 +82,19 @@ def packages(activated):
       raise LookupError(msg.format(act))
   return ifc2pkg
 
-def build_deps_a(ctx, ifx):
+def build_deps_a(ctx, interfaces):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
-  activated = [key for key in ifc2pkg if ctx['interface',key]]
-  #activated = [key for key in ifx if ctx['interface',key]]
-  print activated
-  pkgs = set([ifc2pkg[ifc] for ifc in activated])
-  print pkgs
-  activated = [pkg2ifc[pkg] for pkg in pkgs]
-  print activated
+  ifc2pkg = {}
+  for ifc in interfaces:
+    pkg = ctx['interface', ifc]
+    if pkg is None:
+      continue
+    ifc2pkg[ifc] = pkg
   built_dirs = {}
-  for ifc in activated:
-    print ifc
-    bld = load_nomemo(ifc)
-    print bld
-    yield async.Task(ifc, ctx(bld, {'pkg': ifc2pkg[ifc]}))
+  for ifc, pkg in ifc2pkg.iteritems():
+    bld = builders[pkg]
+    yield async.Task(ifc, ctx(bld, {'pkg': pkg}))
   while True:
     got = yield async.WaitAny
     if got is None:

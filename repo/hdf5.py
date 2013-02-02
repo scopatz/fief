@@ -17,7 +17,7 @@ def build_a(ctx):
     paths = yield async.WaitFor(magic.build_deps_a(ctx, interfaces))
     zlib_dir = paths['zlib']
   
-    mpi_dir = paths['mpi3'] if parl else None
+    mpi_dir = paths['mpi3'] if parl is not None else None
   
     to = yield async.WaitFor(ctx.outfile_a('build'))
     to = os.path.abspath(to)

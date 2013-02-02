@@ -28,8 +28,6 @@ def main_a(activated):
     pkg = ifc2pkg[ifc]
     args['interface', ifc] = pkg
     pkgs.add(pkg)
-  pprint(args)
-  exit(0)
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
     pathlibs = []
