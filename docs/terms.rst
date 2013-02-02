@@ -2,6 +2,7 @@ Terminology
 ============
 The following terms are used consistently throughout the fief code base:
 
+* **pkg**: a package name which may contain many interfaces, e.g. 'zlib' or 'hdf5'.
 * **ifc**: an interface name, e.g. 'zlib' or 'hdf5-parallel'.
 * **interfaces**: a ditionary mapping an interface name to an interface ``ifc()``
   instance, e.g. ``{'zlib': ifc(libs='z')}``.

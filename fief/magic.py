@@ -52,13 +52,17 @@ class ifc(object):
     s = "ifc(subsumes={0!r}, requires={1!r}, libs={2!r})"
     return s.format(self.subsumes, self.requires, self.libs)
 
-def requirements(reqs, activated):
-  """given interfaces data structure, recursively adds interface 
-  requirements."""
-  for act in activated:
-    ifc = interfaces[ifc2pkg[act]][act]
-    reqs |= ifc.requires
-    requirements(reqs, ifc.subsumes)
+def requirements(act):
+  """Given an activated interface act, compute all requirements."""
+  reqs = set([act])
+  for ifc, pkg in ifcpkg:
+    if ifc != act:
+        continue
+    ifx = pkginterfaces[pkg][ifc]
+    reqs |= ifx.requires
+    for subs in ifx.subsumes:
+        reqs |= requirements(subs)
+  return reqs
 
 def build_deps_a(ctx, ifx):
   """Given interfaces data structure, return built hash directories of all 
