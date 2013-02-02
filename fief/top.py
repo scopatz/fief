@@ -23,13 +23,12 @@ def main_a(activated):
   pkgs = set()
   for act in activated:
     reqs |= magic.requirements(act)
+    reqs.add(act)
   ifc2pkg = magic.packages(reqs)
   for ifc in reqs:
     pkg = ifc2pkg[ifc]
     args['interface', ifc] = pkg
     pkgs.add(pkg)
-  pprint(args)
-  exit(0)
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
     pathlibs = []
