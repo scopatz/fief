@@ -8,10 +8,10 @@ if sys.version_info[0] == 3 or sys.version_info[:2] == (2, 7):
 else:
     from . import _argparse as argparse
 
-CONFIGS = [os.path.abspath('fiefconf.py'), 
-           os.path.abspath('fiefconf'), 
+CONFIGS = [os.path.join(os.path.expanduser('~'), '.fiefconf'),
            os.path.join(os.path.expanduser('~'), '.fiefconf.py'),
-           os.path.join(os.path.expanduser('~'), '.fiefconf'),
+           os.path.abspath('fiefconf'), 
+           os.path.abspath('fiefconf.py'), 
            ]
 
 
@@ -22,16 +22,12 @@ def main(args=None):
     ns = parser.parse_args(args)
     if hasattr(ns, 'options'):
         ns.options = ns.options[1:] if ['--'] == ns.options[:1] else ns.options
-    if "conf" not in ns:
-        for conffile in CONFIGS:
-            if os.path.isfile(conffile):
-                ns.conf = conffile
-                break
 
-    # open run-control file, if present
     conf = {}
-    if os.path.isfile(ns.conf):
-        execfile(ns.conf, {}, conf)
+    CONFIGS.append(ns.conf)
+    for conffile in CONFIGS:
+        if os.path.isfile(conffile):
+            execfile(conffile, conf, conf)
 
     # Run the fief command, use dynamic import
     if '.' not in sys.path:
@@ -82,7 +78,7 @@ def _make_argparser():
     add_conf    = lambda p: p.add_argument('--conf', type=str, dest='conf', 
                                            required=False,
                                            help='configuration file path', 
-                                           default=CONFIGS[0])
+                                           default='<conf-file>')
 
     # add build command
     cmds.add('realize')
