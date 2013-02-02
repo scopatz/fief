@@ -167,7 +167,7 @@ class MatchNone(Match):
   def arg(me, x):
     return TestNo
   def result(me, x):
-    pass
+    return False
 
 class TestEqual(object):
   def __init__(me, val, next_match):
@@ -195,13 +195,13 @@ class MatchArgs(Match):
   def arg(me, x):
     def next_match(y):
       m = MatchArgs(me._argtest, me._collector)
-      m._argmem.update(me._chain)
+      m._argmem.update(me._argmem)
       m._argmem[x] = y
       return m
     return me._argtest(x, next_match)
   
   def result(me, ans):
-    me._collector(me._argmem, ans)
+    return me._collector(me._argmem, ans)
 
 class Oven(object):
   def __init__(me, host_a, path):
@@ -290,6 +290,10 @@ class Oven(object):
       argmap = lambda x,up: argroot(x)
     log = yield async.WaitFor(me._memo_a(None, fun_a, argmap))
     yield async.Result(log.result()) # will throw if fun_a did, but thats ok
+  
+  def search_a(me, fun_a, match):
+    funval = valtool.Hasher().eat(fun_a).digest()
+    return me._logdb.search_a(funval, match)
 
 class _Stash(object):
   def __init__(me, oven):
@@ -513,7 +517,25 @@ class _LogDb(object):
       me._valenc[valtool.Hasher().eat(val).digest()] = row
       cur.close()
     return me._valdec[row]
+
+  _sizeof_int = struct.calcsize("<i")
   
+  def _split_val(me, tag, val):
+    if tag in (-1, _tag_inp): # val is a hash
+      a = struct.unpack_from("<i", val)[0]
+      b = buffer(val, me._sizeof_int)
+    else: # val is object
+      val = valtool.pack(val)
+      a = struct.unpack_from("<i", valtool.Hasher().raw(val).digest())[0]
+      b = buffer(val)
+    return a, b
+  
+  def _merge_val(me, tag, a, b):
+    if tag in (-1, _tag_inp):
+      return struct.pack("<i", a) + str(b)
+    else:
+      return valtool.unpack(b)
+
   def memo_a(me, funval, view, calc_a):
     # return: _Log
     # calc_a: _Log -> result
@@ -556,28 +578,10 @@ class _LogDb(object):
             val = wip._vals[ix+1]
           ix += 1
     
-    sizeof_int = struct.calcsize("<i")
-    
-    def split_val(tag, val):
-      if tag in (-1, _tag_inp): # val is a hash
-        a = struct.unpack_from("<i", val)[0]
-        b = buffer(val, sizeof_int)
-      else: # val is object
-        val = valtool.pack(val)
-        a = struct.unpack_from("<i", valtool.Hasher().raw(val).digest())[0]
-        b = buffer(val)
-      return a, b
-    
-    def merge_val(cxn, tag, a, b):
-      if tag in (-1, _tag_inp):
-        return struct.pack("<i", a) + str(b)
-      else:
-        return valtool.unpack(b)
-    
     def step(cxn, enstab, par, partag, val):
       me._ensure_schema(enstab)
       cur = cxn.cursor()
-      val_a, val_b = split_val(partag, val)
+      val_a, val_b = me._split_val(partag, val)
       cur.execute(
         "select rowid, tagkey " +
         "from logtrie " +
@@ -629,7 +633,7 @@ class _LogDb(object):
           ix = -1
           while len(ixs) > 0:
             val = log._vals[ix+1]
-            val_a, val_b = split_val(tag, val)
+            val_a, val_b = me._split_val(tag, val)
             cur.execute(
               "select rowid, tagkey " +
               "from logtrie " +
@@ -655,7 +659,7 @@ class _LogDb(object):
             del ixs[i]
           
           while len(ixs) > 0:
-            val_a, val_b = split_val(tag, log._vals[ix+1])
+            val_a, val_b = me._split_val(tag, log._vals[ix+1])
             ix = ixs[0]
             del ixs[0]
             tag, key = log._tags[ix], log._keys[ix]
@@ -677,3 +681,62 @@ class _LogDb(object):
       me._lock.release(False)
     
     yield async.Result(log)
+
+  def search_a(me, funval, match):
+    def step(cxn, ensure_table, par_tag_tests):
+      me._ensure_schema(ensure_table)
+      cur = cxn.cursor()
+      ans = []
+      for par, partag, test in par_tag_tests:
+        if isinstance(test, TestEqual):
+          val_a, val_b = me._split_val(partag, test._val)
+          got = cur.execute(
+            "select rowid,val_a,val_b,tagkey " +
+            "from logtrie " +
+            "where par=? and val_a=? and val_b=?",
+            (par, val_a, val_b))
+        elif test is TestNo:
+          got = ()
+        else:
+          got = cur.execute(
+            "select rowid,val_a,val_b,tagkey " +
+            "from logtrie " +
+            "where par=?",
+            (par,))
+        for r in got:
+          row, val_a, val_b, tagkey = r
+          m = test(me._merge_val(partag, val_a, val_b))
+          if m is not MatchNone:
+            tag, key = me._decode_val(cxn, tagkey)
+            ans.append((row, tag, key, m))
+      return ans
+    
+    """
+    class Match(object):
+    def input_a(me, x, query_host_a):
+      assert False
+    def arg(me, x):
+      assert False
+    def result(me, x):
+      assert False
+    """
+    oven = me._oven
+    fings = [(-1, -1, TestEqual(funval, lambda y: match))]
+    while len(fings) > 0:
+      fings1 = yield oven._WaitFor_db(lambda cxn, enstab: step(cxn, enstab, fings))
+      del fings[:]
+      for row, tag, key, m in fings1:
+        if tag == _tag_inp:
+          def query_a(x):
+            y = yield async.WaitFor(oven.query_a((x,)))
+            yield async.Result(y[x])
+          test = yield async.WaitFor(m.input_a(key, query_a))
+        elif tag == _tag_arg:
+          test = m.arg(key)
+        elif tag == _tag_done:
+          m.result(key)
+          test = TestNo
+        else:
+          assert False
+        if test is not TestNo:
+          fings.append((row, tag, test))
