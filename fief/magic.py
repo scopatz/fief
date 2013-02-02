@@ -1,9 +1,11 @@
-import async
-import bake
 import os
+import sys
 import shutil
 import tempfile
 import itertools
+
+import async
+import bake
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
@@ -51,7 +53,7 @@ class ifc(object):
 
 def requirements(act):
   """Given an activated interface act, compute all requirements."""
-  reqs = set([act])
+  reqs = set()
   for ifc, pkg in ifcpkg:
     if ifc != act:
         continue
@@ -85,12 +87,13 @@ def packages(activated):
 def build_deps_a(ctx, interfaces):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
-  ifc2pkg = {}
+  deps = set()
   for ifc in interfaces:
     pkg = ctx['interface', ifc]
     if pkg is None:
       continue
-    ifc2pkg[ifc] = pkg
+    deps |= requirements(ifc)
+  ifc2pkg = dict([(dep, ctx['interface', dep]) for dep in deps])
   built_dirs = {}
   for ifc, pkg in ifc2pkg.iteritems():
     bld = builders[pkg]
