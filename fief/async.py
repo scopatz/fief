@@ -29,7 +29,7 @@ class _KeyStripper(object):
     key, val = msg
     return me.it.send(val)
   def throw(me, c, ex, tb):
-    return me.it.throw(type(ex.ex), ex.ex, tb)
+    return me.it.throw(c, ex, tb)
 
 def WaitFor(work, aff=None):
   task = (_KeyStripper, WaitFor, work, aff)
@@ -97,17 +97,6 @@ class Result(object):
     object.__init__(me)
     me.val = val
 
-class TaskError(Exception):
-  def __init__(me, key, ex, tb):
-    Exception.__init__(me)
-    me.key = key
-    me.ex = ex
-    me.traceback = tb
-  def reraise(me):
-    raise type(me.ex), me.ex, me.traceback
-  def __str__(me):
-    return repr(me.key) + ', ' + str(me.ex)
-
 class Lock(object):
   def __init__(me):
     object.__init__(me)
@@ -134,7 +123,7 @@ class Lock(object):
     me._bar.fireone(signal)
 
 class _ItStat(object):
-  __slots__ = ('it','par','key','rcvr','taskn','waitp','hold','done')
+  __slots__ = ('it','par','key','rcvr','taskn','waitp','hold','par_actn')
   def __init__(me, it, par, rcvr, key):
     me.it = it
     me.par = par
@@ -143,6 +132,24 @@ class _ItStat(object):
     me.taskn = 0
     me.waitp = None
     me.hold = []
+    me.par_actn = None
+    
+  def async_traceback(me):
+    lines = []
+    p = me
+    while p is not None:
+      if p.it is not None:
+        file = p.it.gi_code.co_filename
+        lineno = '?' if p.it.gi_frame is None else str(p.it.gi_frame.f_lineno)
+        name = p.it.gi_code.co_name
+        key = 'WaitFor' if p.key is WaitFor else p.key
+        lines.append('  File "%s", line %s, in %s, task key %r' % (file, lineno, name, key))
+      else:
+        lines.append('  <abandoner>, task key %r' % p.key)
+      p = p.par
+    lines.append('Asynchronous traceback (most recent call last):')
+    lines.reverse()
+    return '\n'.join(lines)
 
 def run(it):
   lock = threading.Lock()
@@ -161,13 +168,20 @@ def run(it):
   
   def it_advance(st, rcvr, key, meth):
     if st.it is None:
+      st.taskn -= 1
+      if st.taskn == 0 and st.par_actn is not None:
+        actns.append(st.par_actn)
+        st.par_actn = None
       rcvr(None)
       return None # no action on iterator
     else:
       assert st.waitp is not None
       if st.waitp(key):
-        st.taskn -= 1
         st.waitp = None
+        st.taskn -= 1
+        if st.taskn == 0 and st.par_actn is not None:
+          actns.append(st.par_actn)
+          st.par_actn = None
         return meth(rcvr(st.it))
       else:
         st.hold.append((rcvr, key, meth))
@@ -182,8 +196,8 @@ def run(it):
     return it_advance(st, rcvr, key, (lambda it: it.send((key, val))))
   
   def actn_throw(st, rcvr, key, ex, tb):
-    ex = TaskError(key, ex, tb)
-    return it_advance(st, rcvr, key, (lambda it: it.throw(TaskError, ex, tb)))
+    ex.async_key = key
+    return it_advance(st, rcvr, key, (lambda it: it.throw(type(ex), ex, tb)))
   
   def bar_send(st, rcvr, key, val): # given to barriers
     actns.append((actn_send, st, rcvr, key, val))
@@ -196,30 +210,36 @@ def run(it):
         item = actn[0](*actn[1:])
       except StopIteration:
         item = Result(None)
-      except AssertionError:
-        raise
       except Exception, ex:
+        if not hasattr(ex, 'async_traceback'):
+          ex.async_traceback = st.async_traceback()
+        if hasattr(ex, 'async_key'):
+          del ex.async_key
         item = ex
         item_tb = sys.exc_traceback
       
       if item is None:
         pass # no action on iterator
       elif isinstance(item, Result) or isinstance(item, Exception):
-        st.it = None
         closure.its_live -= 1
+        st.it = None
+        st.taskn -= len(st.hold)
         for rcvr,key,meth in st.hold:
           rcvr(None)
         if isinstance(item, Result):
           if st.par is None:
             closure.result = item.val
           else:
-            actns.append((actn_send, st.par, st.rcvr, st.key, item.val))
+            st.par_actn = (actn_send, st.par, st.rcvr, st.key, item.val)
         else:
           if st.par is None:
             closure.result_ex = item
             closure.result_tb = item_tb
           else:
-            actns.append((actn_throw, st.par, st.rcvr, st.key, item, item_tb))
+            st.par_actn = (actn_throw, st.par, st.rcvr, st.key, item, item_tb) 
+        if st.taskn == 0 and st.par_actn is not None:
+          actns.append(st.par_actn)
+          st.par_actn = None
       else:
         assert isinstance(item, Yield)
         assert st.it is not None
