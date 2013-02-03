@@ -18,16 +18,19 @@ def build_a(ctx):
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('./configure', '--prefix=' + to)
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('make', '-j')
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('make', 'install')
     yield async.WaitFor(c.exec_a())
   finally:
@@ -35,6 +38,6 @@ def build_a(ctx):
 
   libs = set()
   for key, ifc in interfaces.items():
-    if ctx['interface', key]:
+    if ctx['interface', key] is not None:
       libs |= ifc.libs
   yield async.Result((to, libs))

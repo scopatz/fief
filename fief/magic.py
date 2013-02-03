@@ -17,6 +17,7 @@ def fetch_nomemo_a(ctx, pkg):
     
   c = bake.Cmd(ctx)
   c.cwd = bld
+  c.tag = pkg
   if ball.endswith('.tar.gz'):
     c.lit('tar', 'xzf').inf(ball)
   elif ball.endswith('.tar.bz2'):

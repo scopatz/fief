@@ -5,7 +5,6 @@ from fief.magic import ifc, async, Cmd
 
 interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')), 
               'hdf5-cpp': ifc(subsumes='hdf5', libs=('hdf5_cpp', 'hdf5_hl_cpp')), 
-              'hdf5-mp3': ifc(subsumes='hdf5', requires='ffmpeg'), 
               'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2'),
               }
 
@@ -17,7 +16,7 @@ def build_a(ctx):
     parl = ctx['interface','hdf5-parallel']
     paths = yield async.WaitFor(magic.build_deps_a(ctx, interfaces))
     zlib_dir = paths['zlib']  
-    mpi_dir = paths['mpi3'] if parl is not None else None
+    mpi_dir = paths['mpi2'] if parl is not None else None
   
     to = yield async.WaitFor(ctx.outfile_a('build'))
     to = os.path.abspath(to)
@@ -25,6 +24,7 @@ def build_a(ctx):
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('./configure', '--prefix=' + to)\
       .lit('--with-zlib=' + zlib_dir)
     if mpi_dir is not None:
@@ -35,11 +35,13 @@ def build_a(ctx):
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('make', '-j')
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('make', 'install')
     yield async.WaitFor(c.exec_a())
   finally:
@@ -47,6 +49,6 @@ def build_a(ctx):
 
   libs = set()
   for key, ifc in interfaces.items():
-    if ctx['interface', key]:
+    if ctx['interface', key] is not None:
       libs |= ifc.libs
   yield async.Result((to, libs))

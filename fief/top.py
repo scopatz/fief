@@ -8,8 +8,6 @@ import async
 import bake
 import magic
 
-from pprint import pprint
-
 returncode = [None]
 
 def top_a(ctx):
@@ -35,7 +33,12 @@ def main_a(activated):
     for pkg in pkgs:
       pkgargs = {'pkg': pkg}
       pkgargs.update(dict(args))
-      pathlib = yield async.WaitFor(oven.memo_a(top_a, pkgargs))
+      yield async.Task(pkg, oven.memo_a(top_a, pkgargs))
+    while True:
+      got = yield async.WaitAny
+      if got is None:
+        break
+      pkg, pathlib = got
       pathlibs.append(pathlib)
     returncode[0] = 0
     print(pathlibs)

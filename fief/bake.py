@@ -53,6 +53,7 @@ class Cmd(object):
     me.showout = False
     me.showerr = True
     me.env = {}
+    me.tag = None
   
   def lit(me, *toks):
     me._toks += _flatten(toks)
@@ -93,15 +94,19 @@ class Cmd(object):
       p = subprocess.Popen(me._toks, cwd=me.cwd, env=env, stdin=pipe, stdout=pipe, stderr=pipe)
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
+
+    tag = ' ' if me.tag is None else "[{0}] ".format(me.tag)
     
     if me.showerr:
-      print >> sys.stderr, '[RUN] ' + me.shline
+      print >> sys.stderr, '[RUN]' + tag + me.shline
     yield async.WaitFor(go)
     
     if me.showerr and me.stderr != '':
-      print >> sys.stderr, '-'*72 + '\n[ERR] ' + me.shline + '\n' + me.stderr + ('' if me.stderr[-1] == '\n' else '\n') + '-'*72
+      print >> sys.stderr, '-'*72 + '\n[ERR]' + tag + me.shline + '\n' + me.stderr + \
+                           ("" if me.stderr[-1] == '\n' else '\n') + '-'*72
     if me.showout and me.stdout != '':
-      print >> sys.stderr, '-'*72 + '\n[OUT] ' + me.shline + '\n' + me.stdout + ('' if me.stdout[-1] == '\n' else '\n') + '-'*72
+      print >> sys.stderr, '-'*72 + '\n[OUT]' + tag + me.shline + '\n' + me.stdout + \
+                           ("" if me.stdout[-1] == '\n' else '\n') + '-'*72
     
     if me.returncode != 0:
       raise subprocess.CalledProcessError(me.returncode, me.shline)

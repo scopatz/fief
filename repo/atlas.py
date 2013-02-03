@@ -31,6 +31,6 @@ def build_a(ctx):
   
   libs = set()
   for key, ifc in interfaces.items():
-    if ctx['interface', key]:
+    if ctx['interface', key] is not None:
       libs |= ifc.libs
   yield async.Result((to, libs))

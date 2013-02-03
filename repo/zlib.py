@@ -14,16 +14,19 @@ def build_a(ctx):
 
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('./configure', '--prefix=' + to)
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('make')
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
+    c.tag = pkg
     c.lit('make', 'install')
     yield async.WaitFor(c.exec_a())
   finally:
