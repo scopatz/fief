@@ -2,9 +2,9 @@ import os
 from fief import magic
 from fief.magic import ifc, async, Cmd
 
-interfaces = {'mpi3': ifc(libs=('mpich3')),
-              'mpi2': ifc(libs=('mpich3')),
-              'mpi1': ifc(libs=('mpich3')),
+interfaces = {'mpi3': ifc(libs=('openmpi')),
+              'mpi2': ifc(libs=('openmpi')),
+              'mpi1': ifc(libs=('openmpi')),
               }
 
 def build_a(ctx):

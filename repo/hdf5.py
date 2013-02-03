@@ -6,7 +6,7 @@ from fief.magic import ifc, async, Cmd
 interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')), 
               'hdf5-cpp': ifc(subsumes='hdf5', libs=('hdf5_cpp', 'hdf5_hl_cpp')), 
               'hdf5-mp3': ifc(subsumes='hdf5', requires='ffmpeg'), 
-              'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi3'),
+              'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2'),
               }
 
 def build_a(ctx):

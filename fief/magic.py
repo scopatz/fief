@@ -76,9 +76,10 @@ def packages(activated):
       if pref in pkgs:
         ifc2pkg[act] = pref
       else:
-        msg = ("multiple packages implement the {0} interface!\n"
-               "Please select a preference from the following:\n{1}")
-        raise LookupError(msg.format(act, "\n".join(sorted(pkgs))))
+        print preferences
+        msg = ("\n\nmultiple packages implement the {0} interface!\n"
+               "Please select a preference from the following:\n  {1}")
+        raise LookupError(msg.format(act, "\n  ".join(sorted(pkgs))))
     elif 0 == pkgs:
       msg = "no package implements the {0} interface!"
       raise LookupError(msg.format(act))
