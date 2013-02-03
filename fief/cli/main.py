@@ -49,8 +49,6 @@ def main(args=None):
 
 def _make_argparser():
     """Creates agrument parser for fief."""
-    commands = set(['realize'])
-
     cmds = set()
     parser = argparse.ArgumentParser(description='FLASH make utility.', )
     subparsers = parser.add_subparsers(title='subcommands',
@@ -59,26 +57,8 @@ def _make_argparser():
                                        help='sub-command help')
 
     # convenience addition functions
-    add_dry_run = lambda p: p.add_argument('--dry-run', default=False, 
-                                           action='store_true', 
-                                           help='simulates running this command', 
-                                           required=False, dest="dry_run")
-    add_nprocs  = lambda p: p.add_argument('-n', '-np', '--n', '--np', '--nprocs',
-                                           default=None, dest='nprocs')
-    add_target  = lambda p: p.add_argument('-t', '--target', type=str, dest='target', 
-                                           help='target file/dir name', default=None)
-    add_source  = lambda p: p.add_argument('src', type=str, help='source file or dir')
-    add_destin  = lambda p: p.add_argument('dst', type=str, 
-                                           help='destination file or dir')
     add_ifcs = lambda p: p.add_argument('ifcs', type=str, nargs='+', metavar='ifc', 
                                         help='activate additional interfaces')
-    add_activate = lambda p: p.add_argument('-a', '--activate', type=str, nargs='+',
-                                           metavar='ifc', dest='activate',
-                                           help='additional interfaces to activate')
-    add_deactivate = lambda p: p.add_argument('-d', '--deactivate', type=str, 
-                                              nargs='+', metavar='ifc', 
-                                              dest='deactivate',
-                                              help='interfaces to deactivate')
     add_conf = lambda p: p.add_argument('--conf', type=str, dest='conf', 
                                         required=False,
                                         help='configuration file path', 
@@ -87,23 +67,29 @@ def _make_argparser():
                                            dest='verbose', action='store_true',
                                            help='show more information', default=False)
 
-    # add build command
+    # realize command
     cmds.add('realize')
-    subparser = subparsers.add_parser('realize')
+    subparser = subparsers.add_parser('realize', 
+                    help="creates an active set of interfaces.")
     add_conf(subparser)
     add_verbose(subparser)
 
-    # add activate
+    # activate
     cmds.add('activate')
-    subparser = subparsers.add_parser('activate')
+    subparser = subparsers.add_parser('activate', 
+                    help="add interfaces to the current environment.")
     add_conf(subparser)
     add_verbose(subparser)
     add_ifcs(subparser)
 
-    # add default parser for remaining commands
-    for key in set(commands) - cmds:
-        subparser = subparsers.add_parser(key)
-        add_conf(subparser)
+    # deactivate
+    cmds.add('deactivate')
+    subparser = subparsers.add_parser('deactivate',
+                    help="removes interfaces from the current environment.")
+    add_conf(subparser)
+    add_verbose(subparser)
+    add_ifcs(subparser)
+
     return parser
 
 
