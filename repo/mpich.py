@@ -40,4 +40,5 @@ def build_a(ctx):
   for key, ifc in interfaces.items():
     if ctx['interface', key] is not None:
       libs |= ifc.libs
-  yield async.Result((to, libs))
+  delivs = {'root': to, 'libs': libs, 'pkg': pkg}
+  yield async.Result(delivs)

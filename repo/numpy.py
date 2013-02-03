@@ -19,5 +19,6 @@ def build_a(ctx):
     yield async.WaitFor(c.exec_a())
   
     cleanup()
-  
-    yield async.Result((to, ()))
+
+    delivs = {'root': to, 'pkg': pkg}
+    yield async.Result(delivs)  

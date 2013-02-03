@@ -103,7 +103,7 @@ def build_deps_a(ctx, interfaces):
     got = yield async.WaitAny
     if got is None:
       break
-    built_dirs[got[0]] = got[1][0]
+    built_dirs[got[0]] = got[1]['root']
   yield async.Result(built_dirs)
 
 builders = {}
@@ -133,3 +133,5 @@ class Cmd(bake.Cmd):
     super(Cmd, me).__init__(*args, **kwargs)
     me.showout = Cmd.showout
     me.showerr = Cmd.showerr
+
+

@@ -22,4 +22,5 @@ def build_a(ctx):
   
     cleanup()
   
-    yield async.Result((to, ()))
+    delivs = {'root': to, 'pkg': pkg}
+    yield async.Result(delivs)

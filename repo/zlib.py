@@ -32,4 +32,5 @@ def build_a(ctx):
   finally:
     cleanup()
   
-  yield async.Result((to, ('z',)))
+  delivs = {'root': to, 'libs': ('z',), 'pkg': pkg}
+  yield async.Result(delivs)

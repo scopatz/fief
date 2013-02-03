@@ -9,11 +9,12 @@ import bake
 import magic
 
 returncode = [None]
+deliverables = []
 
 def top_a(ctx):
   pkg = ctx['pkg']
-  path, libs = yield async.WaitFor(ctx(magic.builders[pkg]))
-  yield async.Result((path, libs))
+  delivs = yield async.WaitFor(ctx(magic.builders[pkg]))
+  yield async.Result(delivs)
 
 def main_a(activated):
   args = {}
@@ -29,7 +30,6 @@ def main_a(activated):
     pkgs.add(pkg)
   oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
   try:
-    pathlibs = []
     for pkg in pkgs:
       pkgargs = {'pkg': pkg}
       pkgargs.update(dict(args))
@@ -38,10 +38,10 @@ def main_a(activated):
       got = yield async.WaitAny
       if got is None:
         break
-      pkg, pathlib = got
-      pathlibs.append(pathlib)
+      pkg, delivs = got
+      deliverables.append(delivs)
     returncode[0] = 0
-    print(pathlibs)
+    print(deliverables)
   except subprocess.CalledProcessError, e:
     returncode[0] = e.returncode
   
