@@ -8,8 +8,10 @@ if sys.version_info[0] == 3 or sys.version_info[:2] == (2, 7):
 else:
     from . import _argparse as argparse
 
-CONFIGS = [os.path.join(os.path.expanduser('~'), '.fiefconf'),
-           os.path.join(os.path.expanduser('~'), '.fiefconf.py'),
+HOME = os.path.expanduser('~')
+
+CONFIGS = [os.path.join(HOME, '.config', 'fiefconf'),
+           os.path.join(HOME, '.config', 'fiefconf.py'),
            os.path.abspath('fiefconf'), 
            os.path.abspath('fiefconf.py'), 
            ]
@@ -68,6 +70,8 @@ def _make_argparser():
     add_source  = lambda p: p.add_argument('src', type=str, help='source file or dir')
     add_destin  = lambda p: p.add_argument('dst', type=str, 
                                            help='destination file or dir')
+    add_ifcs = lambda p: p.add_argument('ifcs', type=str, nargs='+', metavar='ifc', 
+                                        help='activate additional interfaces')
     add_activate = lambda p: p.add_argument('-a', '--activate', type=str, nargs='+',
                                            metavar='ifc', dest='activate',
                                            help='additional interfaces to activate')
@@ -88,8 +92,13 @@ def _make_argparser():
     subparser = subparsers.add_parser('realize')
     add_conf(subparser)
     add_verbose(subparser)
-    add_activate(subparser)
-    add_deactivate(subparser)
+
+    # add activate
+    cmds.add('activate')
+    subparser = subparsers.add_parser('activate')
+    add_conf(subparser)
+    add_verbose(subparser)
+    add_ifcs(subparser)
 
     # add default parser for remaining commands
     for key in set(commands) - cmds:
