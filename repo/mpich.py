@@ -3,9 +3,10 @@ from fief import repo
 from fief import conf
 from fief.repo import ifc, async, Cmd
 
-interfaces = {'mpi3': ifc(libs=('mpich3')),
-              'mpi2': ifc(libs=('mpich3')),
-              'mpi1': ifc(libs=('mpich3')),
+_libs = ('mpich', 'fmpich', 'mpichcxx', 'mpichf90', 'mpl', 'opa')
+interfaces = {'mpi3': ifc(libs=_libs)
+              'mpi2': ifc(libs=_libs),
+              'mpi1': ifc(libs=_libs),
               }
 
 realize = repo.c_realize
