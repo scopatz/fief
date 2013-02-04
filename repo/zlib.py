@@ -1,5 +1,6 @@
 import os
 from fief import repo
+from fief import conf
 from fief.repo import ifc, async, Cmd
 
 interfaces = {'zlib': ifc(libs='z')}
@@ -27,13 +28,13 @@ def build_a(ctx):
     c = Cmd(ctx)
     c.cwd = src
     c.tag = pkg
-    c.lit('make')
+    c.lit(conf.make)
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
     c.tag = pkg
-    c.lit('make', 'install')
+    c.lit(conf.make_install)
     yield async.WaitFor(c.exec_a())
   finally:
     cleanup()

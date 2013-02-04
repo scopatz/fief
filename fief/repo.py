@@ -3,7 +3,7 @@ import sys
 import shutil
 import tempfile
 import itertools
-import configuration
+import conf
 
 import async
 import bake
@@ -82,7 +82,7 @@ def active_packages(activated):
     if 1 == pkgslen:
       ifc2pkg[act] = pkgs[0]
     elif 1 < pkgslen:
-      pref = configuration.preferences.get(act, None)
+      pref = conf.preferences.get(act, None)
       if pref in pkgs:
         ifc2pkg[act] = pref
       else:
@@ -104,7 +104,7 @@ def build_deps_a(ctx, interfaces):
       continue
     deps |= requirements(ifc)
   ifc2pkg = dict([(dep, ctx['interface', dep]) for dep in deps])
-  built_dirs = {}
+  deliverables = {}
   for ifc, pkg in ifc2pkg.iteritems():
     bld_a = packages[pkg].builder
     yield async.Task(ifc, ctx(bld_a, {'pkg': pkg}))
@@ -112,8 +112,10 @@ def build_deps_a(ctx, interfaces):
     got = yield async.WaitAny
     if got is None:
       break
-    built_dirs[got[0]] = got[1]['root']
-  yield async.Result(built_dirs)
+    pkg, delivs = got
+    deliverables[pkg] = delivs
+  env = envrealize(deliverables)
+  yield async.Result(env)
 
 
 def _pack_ifx(ifx):
@@ -178,10 +180,10 @@ class Cmd(bake.Cmd):
 
 ensure_envvalue = lambda v: set(v) if hasattr(v, '__iter__') else str(v)
 
-def evnrealize(deliverables):
+def envrealize(deliverables):
   """Returns an environment realized from a list of delivs tuples."""
   env = {}
-  for pkg,delivs in deliverables.iteritems():
+  for pkg, delivs in deliverables.iteritems():
     realizer = packages[pkg].realizer
     pkgenv = realizer(delivs)
     for k, v in pkgenv.iteritems():

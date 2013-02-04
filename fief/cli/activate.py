@@ -5,9 +5,9 @@ import _magic
 USAGE = ("Adds interfaces to a fief active set.\n\n"
          "usage: fief activate [-v] [-c] ifc [ifc ...]")
 
-def main(ns, conf):
+def main(ns, config):
     """Adds interfaces to a fief active set."""
-    activated = _magic.env_active_set(conf)
+    activated = _magic.env_active_set(config)
     activated |= set(ns.ifcs)
     env = {'FIEF_ACTIVE_SET': ','.join(activated)}
     if ns.verbose:

@@ -25,18 +25,18 @@ def main(args=None):
     if hasattr(ns, 'options'):
         ns.options = ns.options[1:] if ['--'] == ns.options[:1] else ns.options
 
-    conf = {}
+    config = {}
     CONFIGS.append(ns.conf)
     for conffile in CONFIGS:
         if os.path.isfile(conffile):
-            execfile(conffile, conf, conf)
+            execfile(conffile, config, config)
 
     # Run the fief command, use dynamic import
     if '.' not in sys.path:
         sys.path.insert(0, '.')
     cmdmod = __import__(ns.cmd, globals(), locals(), fromlist=[None])
     mainfunc = getattr(cmdmod, 'main')
-    rtn = mainfunc(ns, conf)
+    rtn = mainfunc(ns, config)
 
     # Handle some edge cases
     if rtn is NotImplemented:
