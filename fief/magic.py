@@ -108,6 +108,7 @@ def build_deps_a(ctx, interfaces):
 
 builders = {}
 tarballs = {}
+realizers = {}
 pkginterfaces = {}
 ifcpkg = []
 preferences = {}
@@ -118,6 +119,7 @@ def init(config):
     execfile(os.path.join('repo', f), ns, ns)
     builders[pkg] = ns['build_a']
     tarballs[pkg] = tarball
+    realizers[pkg] = ns.get('realize', lambda delivs: {})
     pkginterfaces[pkg] = ns['interfaces']
     for ifc in pkginterfaces[pkg]:
       ifcpkg.append((ifc, pkg))
@@ -134,4 +136,33 @@ class Cmd(bake.Cmd):
     me.showout = Cmd.showout
     me.showerr = Cmd.showerr
 
+ensure_envvalue = lambda v: set(v) if hasattr(v, '__iter__') else str(v)
 
+def evnrealize(deliverables):
+  """Returns an environment realized from a list of delivs tuples."""
+  env = {}
+  for delivs in deliverables:
+    realizer = realizers[delivs['pkg']]
+    pkgenv = realizer(delivs)
+    for k, v in pkgenv.iteritems():
+      if k not in env:
+        env[k] = ensure_envvalue(v)
+      elif hasattr(v, '__iter__'):
+        if not hasattr(env[k], '__iter__'):
+          msg = ("environment variables must both be containers or both be "
+                 "scalars. For key {0!r} got {1!r} and {2!r}.")
+          raise ValueError(k, sorted(v), env[k])
+        env[k] |= ensure_envvalue(v)
+      else:
+        if v != k[v]:
+          msg = ("scalars must have the same value. "
+                 "For key {0!r} got {1!r} and {2!r}.")
+          raise ValueError(k, v, env[k])
+  for k, v in env.items():
+    if not hasattr(v, '__iter__'):
+      continue
+    origv = os.getenv(k, None)
+    origv = [] if origv is None else origv.split(os.pathsep)
+    newv = v - set(origv)
+    env[k] = os.pathsep.join(sorted(newv) + origv)
+  return env

@@ -4,6 +4,12 @@ from fief.magic import ifc, async, Cmd
 
 interfaces = {'zlib': ifc(libs='z')}
 
+def realize(delivs):
+  root = delivs['root']
+  env = {'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
+         'C_INCLUDE_PATH': [os.path.join(root, 'include')]}
+  return env
+
 def build_a(ctx):
   pkg = ctx['pkg']
   src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))

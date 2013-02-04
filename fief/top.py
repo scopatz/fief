@@ -41,7 +41,7 @@ def main_a(activated):
       pkg, delivs = got
       deliverables.append(delivs)
     returncode[0] = 0
-    print(deliverables)
+    from pprint import pformat; sys.stderr.write(pformat(deliverables) + '\n')
   except subprocess.CalledProcessError, e:
     returncode[0] = e.returncode
   

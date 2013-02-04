@@ -9,7 +9,6 @@ USAGE = ("Realizes a fief active set."
 
 def main(ns, conf):
     """Realizes a fief active set."""
-    origenv = dict(os.environ)
     repo = {}
     execfile(os.path.join('repo', '__repo__.py'), repo, repo)
     magic.Cmd.showout = ns.verbose
@@ -18,5 +17,6 @@ def main(ns, conf):
     activated = set(conf.get('interfaces', []))
     activated |= set(_magic.env_active_set())
     async.run(top.main_a(activated))
-    _magic.exportvars(origenv)
+    env = magic.evnrealize(top.deliverables)
+    _magic.exportvars(env)
     exit(top.returncode[0])
