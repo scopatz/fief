@@ -10,11 +10,11 @@ import bake
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
   repo = 'repo'
-  
-  ball = os.path.abspath(os.path.join(repo, tarballs[pkg]))
+  p = packages[pkg]
+  ball = os.path.abspath(os.path.join(repo, p.source))
   name = os.path.split(ball)[-1].rsplit('.', 2)[0]
   bld = tempfile.mkdtemp()
-    
+  
   c = bake.Cmd(ctx)
   c.cwd = bld
   c.tag = pkg
@@ -39,7 +39,8 @@ def merge_lib_deps(*depss):
   seq = reverse(itertools.chain(*depss))
   return reverse(tuple(x for x in seq if x not in seen and not seen_add(x)))
 
-ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
+#ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
+ensure_frozenset = lambda x: set(x if hasattr(x, '__iter__') else (x,))
 
 class ifc(object):
 
@@ -51,20 +52,27 @@ class ifc(object):
   def __repr__(self):
     s = "ifc(subsumes={0!r}, requires={1!r}, libs={2!r})"
     return s.format(self.subsumes, self.requires, self.libs)
+  
+  @staticmethod
+  def pack(me):
+    return (me.subsumes, me.requires, me.libs)
+  @staticmethod
+  def unpack(x):
+    return ifc(x[0], x[1], x[2])
 
 def requirements(act):
   """Given an activated interface act, compute all requirements."""
   reqs = set()
   for ifc, pkg in ifcpkg:
     if ifc != act:
-        continue
-    ifx = pkginterfaces[pkg][ifc]
+      continue
+    ifx = packages[pkg].interfaces[ifc]
     reqs |= ifx.requires
     for subs in ifx.subsumes:
-        reqs |= requirements(subs)
+      reqs |= requirements(subs)
   return reqs
 
-def packages(activated):
+def active_packages(activated):
   """Computes unique package names that implement the activated interfaces."""
   ifc2pkg = {}
   for act in activated:
@@ -97,8 +105,8 @@ def build_deps_a(ctx, interfaces):
   ifc2pkg = dict([(dep, ctx['interface', dep]) for dep in deps])
   built_dirs = {}
   for ifc, pkg in ifc2pkg.iteritems():
-    bld = builders[pkg]
-    yield async.Task(ifc, ctx(bld, {'pkg': pkg}))
+    bld_a = packages[pkg].builder
+    yield async.Task(ifc, ctx(bld_a, {'pkg': pkg}))
   while True:
     got = yield async.WaitAny
     if got is None:
@@ -106,24 +114,58 @@ def build_deps_a(ctx, interfaces):
     built_dirs[got[0]] = got[1]['root']
   yield async.Result(built_dirs)
 
-builders = {}
-tarballs = {}
-realizers = {}
-pkginterfaces = {}
-ifcpkg = []
+
+def _pack_ifx(ifx):
+  return dict((nm,ifc.pack(x)) for nm,x in ifx.iteritems())
+
+def _unpack_ifx(s):
+  return dict((nm,ifc.unpack(x)) for nm,x in s.iteritems())
+
+class Package(object):
+  def __init__(me, name, tup):
+    me.name = name
+    me.source = tup[0]
+    me.builder_py = tup[1]
+    me._realizer = None
+    me._builder = None
+  
+  def _load(me):
+    ns = {}
+    execfile(os.path.join('repo', me.builder_py), ns, ns)
+    me._builder = ns['build_a']
+    me._realizer = ns.get('realize', lambda _:{})
+  
+  @property
+  def builder(me):
+    if me._builder is None: me._load()
+    return me._builder
+  
+  @property
+  def realizer(me):
+    if me._realizer is None: me._load()
+    return me._realizer
+
+packages = {}
+ifcpkg = set()
+
+# move me to config!
 preferences = {}
 
-def init(oven, config):
-  for pkg, (tarball, f) in config.iteritems():
+def init_a(oven, repo_pkgs):
+  def packed_ifx_a(ctx):
+    builder_py = ctx['builder_py']
     ns = {}
-    execfile(os.path.join('repo', f), ns, ns)
-    builders[pkg] = ns['build_a']
-    tarballs[pkg] = tarball
-    realizers[pkg] = ns.get('realize', lambda delivs: {})
-    pkginterfaces[pkg] = ns['interfaces']
-    for ifc in pkginterfaces[pkg]:
-      ifcpkg.append((ifc, pkg))
-
+    execfile(os.path.join('repo', builder_py), ns, ns)
+    yield async.Result(_pack_ifx(ns['interfaces']))
+  
+  for name,tup in repo_pkgs.iteritems():
+    pkg = Package(name, tup)
+    packages[name] = pkg
+    ifx = yield async.WaitFor(oven.memo_a(packed_ifx_a, {'builder_py':pkg.builder_py}))
+    ifx = _unpack_ifx(ifx)
+    pkg.interfaces = ifx
+    for ifc in ifx:
+      ifcpkg.add((ifc, name))
 
 class Cmd(bake.Cmd):
   """Proxy class for bake Cmd, to enable globally setting showout & showerr."""
@@ -142,7 +184,7 @@ def evnrealize(deliverables):
   """Returns an environment realized from a list of delivs tuples."""
   env = {}
   for pkg,delivs in deliverables.iteritems():
-    realizer = realizers[pkg]
+    realizer = packages[pkg].realizer
     pkgenv = realizer(delivs)
     for k, v in pkgenv.iteritems():
       if k not in env:

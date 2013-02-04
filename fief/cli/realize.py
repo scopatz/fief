@@ -1,4 +1,5 @@
 import os
+import sys
 from .. import async
 from .. import bake
 from .. import magic
@@ -16,13 +17,17 @@ def main(ns, conf):
   def top_a():
     oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
     magic.Cmd.showout = ns.verbose
-    magic.init(oven, repo['packages'])
+    yield async.WaitFor(magic.init_a(oven, repo['packages']))
     magic.preferences.update(conf.get('preferences', ()))
     activated = _magic.env_active_set(conf)
     ans = yield async.WaitFor(deliver.deliver_a(oven, activated))
     yield async.Result(ans)
   
-  deliverables = async.run(top_a())
+  try:
+    deliverables = async.run(top_a())
+  except Exception, e:
+    print>>sys.stderr, e.async_traceback
+    raise
   env = magic.evnrealize(deliverables)
   _magic.exportvars(env)
   return 0

@@ -14,7 +14,7 @@ def deliver_a(oven, active_ifcs):
     reqs |= magic.requirements(ifc)
     reqs.add(ifc)
   
-  ifc2pkg = magic.packages(reqs)
+  ifc2pkg = magic.active_packages(reqs)
   
   args = {}
   pkgs = set()
@@ -26,7 +26,7 @@ def deliver_a(oven, active_ifcs):
   for pkg in pkgs:
     args1 = dict(args)
     args1['pkg'] = pkg
-    yield async.Task(pkg, oven.memo_a(magic.builders[pkg], args1))
+    yield async.Task(pkg, oven.memo_a(magic.packages[pkg].builder, args1))
   
   deliverables = {}
   while True:
