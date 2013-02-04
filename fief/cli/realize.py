@@ -4,6 +4,7 @@ from .. import async
 from .. import bake
 from .. import repo
 from .. import deliver
+from .. import configuration
 import _magic
 
 USAGE = ("Realizes a fief active set."
@@ -18,7 +19,7 @@ def main(ns, conf):
     oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
     repo.Cmd.showout = ns.verbose
     yield async.WaitFor(repo.init_a(oven, repos['packages']))
-    repo.preferences.update(conf.get('preferences', ()))
+    configuration.preferences.update(conf.get('preferences', ()))
     activated = _magic.env_active_set(conf)
     ans = yield async.WaitFor(deliver.deliver_a(oven, activated))
     yield async.Result(ans)

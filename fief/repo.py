@@ -3,6 +3,7 @@ import sys
 import shutil
 import tempfile
 import itertools
+import configuration
 
 import async
 import bake
@@ -81,7 +82,7 @@ def active_packages(activated):
     if 1 == pkgslen:
       ifc2pkg[act] = pkgs[0]
     elif 1 < pkgslen:
-      pref = preferences.get(act, None)
+      pref = configuration.preferences.get(act, None)
       if pref in pkgs:
         ifc2pkg[act] = pref
       else:
@@ -147,9 +148,6 @@ class Package(object):
 
 packages = {}
 ifcpkg = set()
-
-# move me to config!
-preferences = {}
 
 def init_a(oven, repo_pkgs):
   def packed_ifx_a(ctx):
