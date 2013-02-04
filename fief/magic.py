@@ -113,7 +113,7 @@ pkginterfaces = {}
 ifcpkg = []
 preferences = {}
 
-def init(config):
+def init(oven, config):
   for pkg, (tarball, f) in config.iteritems():
     ns = {}
     execfile(os.path.join('repo', f), ns, ns)
@@ -141,8 +141,8 @@ ensure_envvalue = lambda v: set(v) if hasattr(v, '__iter__') else str(v)
 def evnrealize(deliverables):
   """Returns an environment realized from a list of delivs tuples."""
   env = {}
-  for delivs in deliverables:
-    realizer = realizers[delivs['pkg']]
+  for pkg,delivs in deliverables.iteritems():
+    realizer = realizers[pkg]
     pkgenv = realizer(delivs)
     for k, v in pkgenv.iteritems():
       if k not in env:

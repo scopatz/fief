@@ -13,4 +13,4 @@ def main(ns, conf):
     if ns.verbose:
         sys.stderr.write("currently active interfaces: " + ', '.join(activated) + '\n')
     _magic.exportvars(env)
-    exit(0)
+    return 0

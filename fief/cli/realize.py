@@ -1,21 +1,28 @@
 import os
 from .. import async
+from .. import bake
 from .. import magic
-from .. import top
+from .. import deliver
 import _magic
 
 USAGE = ("Realizes a fief active set."
          "usage: fief [realize]")
 
 def main(ns, conf):
-    """Realizes a fief active set."""
-    repo = {}
-    execfile(os.path.join('repo', '__repo__.py'), repo, repo)
+  """Realizes a fief active set."""
+  repo = {}
+  execfile(os.path.join('repo', '__repo__.py'), repo, repo)
+  
+  def top_a():
+    oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
     magic.Cmd.showout = ns.verbose
-    magic.init(repo['packages'])
+    magic.init(oven, repo['packages'])
     magic.preferences.update(conf.get('preferences', ()))
     activated = _magic.env_active_set(conf)
-    async.run(top.main_a(activated))
-    env = magic.evnrealize(top.deliverables)
-    _magic.exportvars(env)
-    exit(top.returncode[0])
+    ans = yield async.WaitFor(deliver.deliver_a(oven, activated))
+    yield async.Result(ans)
+  
+  deliverables = async.run(top_a())
+  env = magic.evnrealize(deliverables)
+  _magic.exportvars(env)
+  return 0

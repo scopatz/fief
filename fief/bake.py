@@ -390,7 +390,8 @@ class _Context(_View):
     p = os.path.realpath(path)
     return p.startswith(o + os.path.sep) # ugly, should use os.path.samefile
   
-  def outfile_a(me, path):
+  def outfile_a(me, *paths):
+    path = os.path.join(*paths)
     o = yield async.WaitFor(me._oven._outfile_a(path))
     me._outfs.append(o)
     yield async.Result(o)
@@ -688,34 +689,71 @@ class _LogDb(object):
     yield async.Result(log)
 
   def search_a(me, funval, match):
-    def step(cxn, ensure_table, par_tag_tests):
-      me._ensure_schema(ensure_table)
-      cur = cxn.cursor()
-      ans = []
-      for par, partag, test in par_tag_tests:
-        if isinstance(test, TestEqual):
-          val_a, val_b = me._split_val(partag, test._val)
-          got = cur.execute(
-            "select rowid,val_a,val_b,tagkey " +
-            "from logtrie " +
-            "where par=? and val_a=? and val_b=?",
-            (par, val_a, val_b))
-        elif test is TestNo:
-          got = ()
-        else:
-          got = cur.execute(
-            "select rowid,val_a,val_b,tagkey " +
-            "from logtrie " +
-            "where par=?",
-            (par,))
-        for r in got:
-          row, val_a, val_b, tagkey = r
-          m = test(me._merge_val(partag, val_a, val_b))
+    if True:
+      def step(cxn, ensure_table, par_tag_tests):
+        me._ensure_schema(ensure_table)
+        par_tagtest = {}
+        conds = ([],[])
+        binds = ([],[])
+        for par,partag,test in par_tag_tests:
+          par_tagtest[par] = (partag,test)
+          if isinstance(test, TestEqual):
+            val_a, val_b = me._split_val(partag, test._val)
+            conds[0].append("(par=? and val_a=? and val_b=?)")
+            binds[0].extend((par, val_a, val_b))
+          elif test is not TestNo:
+            conds[1].append("par=?")
+            binds[1].append(par)
+        
+        conds = conds[0] + conds[1]
+        binds = binds[0] + binds[1]
+        cur = cxn.cursor()
+        cur.execute(
+          "select rowid, par, val_a, val_b, tagkey " +
+          "from logtrie " +
+          ("where " + " or ".join(conds) if len(conds)>0 else ""),
+          binds)
+        ans = []
+        for r in cur:
+          row, par, val_a, val_b, tagkey = r
+          partag, test = par_tagtest[par]
+          if isinstance(test, TestEqual):
+            m = test(test._val)
+          else:
+            m = test(me._merge_val(partag, val_a, val_b))
           if m is not MatchNone:
             tag, key = me._decode_val(cxn, tagkey)
             ans.append((row, tag, key, m))
-      return ans
-    
+        return ans
+    else:
+      def step(cxn, ensure_table, par_tag_tests):
+        me._ensure_schema(ensure_table)
+        cur = cxn.cursor()
+        ans = []
+        for par, partag, test in par_tag_tests:
+          if isinstance(test, TestEqual):
+            val_a, val_b = me._split_val(partag, test._val)
+            got = cur.execute(
+              "select rowid,val_a,val_b,tagkey " +
+              "from logtrie " +
+              "where par=? and val_a=? and val_b=?",
+              (par, val_a, val_b))
+          elif test is TestNo:
+            got = ()
+          else:
+            got = cur.execute(
+              "select rowid,val_a,val_b,tagkey " +
+              "from logtrie " +
+              "where par=?",
+              (par,))
+          for r in got:
+            row, val_a, val_b, tagkey = r
+            m = test(me._merge_val(partag, val_a, val_b))
+            if m is not MatchNone:
+              tag, key = me._decode_val(cxn, tagkey)
+              ans.append((row, tag, key, m))
+        return ans
+      
     """
     class Match(object):
     def input_a(me, x, query_host_a):
@@ -735,13 +773,21 @@ class _LogDb(object):
           def query_a(x):
             y = yield async.WaitFor(oven.query_a((x,)))
             yield async.Result(y[x])
-          test = yield async.WaitFor(m.input_a(key, query_a))
-        elif tag == _tag_arg:
-          test = m.arg(key)
-        elif tag == _tag_done:
-          m.result(key)
-          test = TestNo
+          yield async.Task((row,tag), m.input_a(key, query_a))
+          #test = yield async.WaitFor(m.input_a(key, query_a))
         else:
-          assert False
+          if tag == _tag_arg:
+            test = m.arg(key)
+          elif tag == _tag_done:
+            m.result(key)
+            test = TestNo
+          else:
+            assert False
+          if test is not TestNo:
+            fings.append((row, tag, test))
+      while True:
+        got = yield async.WaitAny
+        if got is None: break
+        (row, tag), test = got
         if test is not TestNo:
           fings.append((row, tag, test))

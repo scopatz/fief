@@ -14,7 +14,7 @@ def build_a(ctx):
   pkg = ctx['pkg']
   src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))
   try:  
-    to = yield async.WaitFor(ctx.outfile_a('build'))
+    to = yield async.WaitFor(ctx.outfile_a('build', pkg))
     to = os.path.abspath(to)
     os.mkdir(to)
 
