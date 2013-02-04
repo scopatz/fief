@@ -74,6 +74,12 @@ def _make_argparser():
     add_conf(subparser)
     add_verbose(subparser)
 
+    # active
+    cmds.add('active')
+    subparser = subparsers.add_parser('active', 
+                    help="displays the active interfaces.")
+    add_conf(subparser)
+
     # activate
     cmds.add('activate')
     subparser = subparsers.add_parser('activate', 
