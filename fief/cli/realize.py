@@ -14,8 +14,7 @@ def main(ns, conf):
     magic.Cmd.showout = ns.verbose
     magic.init(repo['packages'])
     magic.preferences.update(conf.get('preferences', ()))
-    activated = set(conf.get('interfaces', []))
-    activated |= set(_magic.env_active_set())
+    activated = _magic.env_active_set(conf)
     async.run(top.main_a(activated))
     env = magic.evnrealize(top.deliverables)
     _magic.exportvars(env)

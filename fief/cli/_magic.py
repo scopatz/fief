@@ -16,9 +16,12 @@ def exportvars(currenv=None, origenv=None,
     s = " ".join(changed)
     sys.stdout.write(s)
 
-def env_active_set():
+def env_active_set(conf=None):
     """Gets the active set of interfaces from the environment."""
-    actenv = os.getenv('FIEF_ACTIVE_SET', '')
+    actenv = os.getenv('FIEF_ACTIVE_SET', '')    
     actenv = set([ae.strip() for ae in actenv.split(',')])
     actenv.discard('')
+    if 0 == len(actenv):
+        conf = conf or {}
+        actenv = set(conf.get('interfaces', ()))
     return actenv

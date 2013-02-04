@@ -7,7 +7,7 @@ USAGE = ("Removes interfaces from a fief active set.\n\n"
 
 def main(ns, conf):
     """Adds interfaces to a fief active set."""
-    activated = _magic.env_active_set()
+    activated = _magic.env_active_set(conf)
     activated -= set(ns.ifcs)
     env = {'FIEF_ACTIVE_SET': ','.join(activated)}
     if ns.verbose:
