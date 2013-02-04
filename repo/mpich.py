@@ -8,13 +8,7 @@ interfaces = {'mpi3': ifc(libs=('mpich3')),
               'mpi1': ifc(libs=('mpich3')),
               }
 
-def realize(delivs):
-  root = delivs['root']
-  env = {'PATH': [os.path.join(root, 'bin')], 
-         'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
-         'C_INCLUDE_PATH': [os.path.join(root, 'include')],
-         }
-  return env
+realize = repo.c_realize
 
 def build_a(ctx):
   pkg = ctx['pkg']

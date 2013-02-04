@@ -1,3 +1,3 @@
-FIST
+fief
 ==================
-The package manager to knock your socks off!
+Ye ol' package manager.

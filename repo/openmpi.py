@@ -1,11 +1,14 @@
 import os
 from fief import repo
+from fief import conf
 from fief.repo import ifc, async, Cmd
 
 interfaces = {'mpi3': ifc(libs=('openmpi')),
               'mpi2': ifc(libs=('openmpi')),
               'mpi1': ifc(libs=('openmpi')),
               }
+
+realize = repo.c_realize
 
 def build_a(ctx):
   pkg = ctx['pkg']
@@ -18,20 +21,20 @@ def build_a(ctx):
   
     c = Cmd(ctx)
     c.cwd = src
-    c.tag = 'openmpi'
+    c.tag = pkg
     c.lit('./configure', '--prefix=' + to)
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
-    c.tag = 'openmpi'
-    c.lit('make', '-j', 'all')
+    c.tag = pkg
+    c.lit(conf.make, 'all')
     yield async.WaitFor(c.exec_a())
   
     c = Cmd(ctx)
     c.cwd = src
-    c.tag = 'openmpi'
-    c.lit('make', 'install')
+    c.tag = pkg
+    c.lit(conf.make_install)
     yield async.WaitFor(c.exec_a())
   finally:
     cleanup()

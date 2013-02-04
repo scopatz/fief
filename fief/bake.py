@@ -95,18 +95,18 @@ class Cmd(object):
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
 
-    tag = ' ' if me.tag is None else "[{0}] ".format(me.tag)
+    tag = '] ' if me.tag is None else ": {0}] ".format(me.tag)
     
     if me.showerr:
-      print >> sys.stderr, '[RUN]' + tag + me.shline
+      sys.stderr.write('[RUN' + tag + me.shline + '\n')
     yield async.WaitFor(go)
     
     if me.showerr and me.stderr != '':
-      print >> sys.stderr, '-'*72 + '\n[ERR]' + tag + me.shline + '\n' + me.stderr + \
-                           ("" if me.stderr[-1] == '\n' else '\n') + '-'*72
+      sys.stderr.write('-'*72 + '\n[ERR' + tag + me.shline + '\n' + me.stderr + \
+                       ("" if me.stderr[-1] == '\n' else '\n') + '-'*72 + '\n')
     if me.showout and me.stdout != '':
-      print >> sys.stderr, '-'*72 + '\n[OUT]' + tag + me.shline + '\n' + me.stdout + \
-                           ("" if me.stdout[-1] == '\n' else '\n') + '-'*72
+      sys.stderr.write('-'*72 + '\n[OUT' + tag + me.shline + '\n' + me.stdout + \
+                       ("" if me.stdout[-1] == '\n' else '\n') + '-'*72 + '\n')
     
     if me.returncode != 0:
       raise subprocess.CalledProcessError(me.returncode, me.shline)

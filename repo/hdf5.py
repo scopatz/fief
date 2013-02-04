@@ -9,12 +9,7 @@ interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')),
               'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2'),
               }
 
-def realize(delivs):
-  root = delivs['root']
-  env = {'PATH': [os.path.join(root, 'bin')],
-         'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
-         'C_INCLUDE_PATH': [os.path.join(root, 'include')]}
-  return env
+realize = repo.c_realize
 
 def build_a(ctx):
   pkg = ctx['pkg']

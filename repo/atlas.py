@@ -4,6 +4,8 @@ from fief.repo import ifc, async, bake
 
 interfaces = {'atlas': ifc(libs='atlas')}
 
+realize = repo.c_realize
+
 def build_a(ctx):
   pkg = ctx['pkg']
   src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))

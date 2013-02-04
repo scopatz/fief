@@ -66,12 +66,17 @@ def _make_argparser():
     add_verbose = lambda p: p.add_argument('-v', '--verbose', 
                                            dest='verbose', action='store_true',
                                            help='show more information', default=False)
+    add_lazy = lambda p: p.add_argument('-l', '--lazy', 
+                                        dest='lazy', action='store_true',
+                                        help='modify env only if no building needed', 
+                                        default=False)
 
     # realize command
     cmds.add('realize')
     subparser = subparsers.add_parser('realize', 
                     help="creates an active set of interfaces.")
     add_conf(subparser)
+    add_lazy(subparser)
     add_verbose(subparser)
 
     # active

@@ -21,7 +21,7 @@ def main(ns, config):
     yield async.WaitFor(repo.init_a(oven, repos['packages']))
     conf._init(config)
     activated = _magic.env_active_set(config)
-    ans = yield async.WaitFor(deliver.deliver_a(oven, activated))
+    ans = yield async.WaitFor(deliver.deliver_a(oven, activated, ns.lazy))
     yield async.Result(ans)
   
   try:

@@ -6,9 +6,8 @@ from fief.repo import ifc, async, Cmd
 interfaces = {'zlib': ifc(libs='z')}
 
 def realize(delivs):
-  root = delivs['root']
-  env = {'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
-         'C_INCLUDE_PATH': [os.path.join(root, 'include')]}
+  env = repo.c_realize(delivs)
+  del env['PATH']
   return env
 
 def build_a(ctx):

@@ -8,7 +8,7 @@ import async
 import bake
 import repo
 
-def deliver_a(oven, active_ifcs):
+def deliver_a(oven, active_ifcs, lazy=False):
   reqs = set()
   for ifc in active_ifcs:
     reqs |= repo.requirements(ifc)
@@ -26,7 +26,10 @@ def deliver_a(oven, active_ifcs):
   for pkg in pkgs:
     args1 = dict(args)
     args1['pkg'] = pkg
-    yield async.Task(pkg, oven.memo_a(repo.packages[pkg].builder, args1))
+    if lazy:
+      assert False
+    else:
+      yield async.Task(pkg, oven.memo_a(repo.packages[pkg].builder, args1))
   
   deliverables = {}
   while True:
@@ -34,5 +37,4 @@ def deliver_a(oven, active_ifcs):
     if got is None: break
     pkg, delivs = got
     deliverables[pkg] = delivs
-  #from pprint import pformat; sys.stderr.write(pformat(deliverables) + '\n')
   yield async.Result(deliverables)

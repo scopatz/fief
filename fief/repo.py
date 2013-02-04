@@ -3,10 +3,10 @@ import sys
 import shutil
 import tempfile
 import itertools
-import conf
 
-import async
+import conf
 import bake
+import async
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
@@ -94,6 +94,50 @@ def active_packages(activated):
       raise LookupError(msg.format(act))
   return ifc2pkg
 
+def upgrade_to_avoid_a(oven, ifc2pkg):
+  """The name says it all!"""
+  built = {}
+  pkgs = set(ifc2pkg.values())
+  for pkg in pkgs:
+    built[pkg] = []
+    def argtest(x, nextmatch):
+      if isinstance(x, tuple) and x[0] == 'interface':
+        if ifc2pkg[x[1]] is not None:
+          return bake.TestEqual(x[1], nextmatch)
+        else:
+          return nextmatch
+      elif x == 'pkg':
+        return bake.TestEqual(pkg, nextmatch)
+      else:
+        assert False
+
+    def collector(args, result):
+      d = {}
+      for arg in args:
+        if isinstance(arg, tuple) and arg[0] == 'interface':
+          d[arg[1]] = args[arg]
+      built[pkg].append(d)
+
+    yield async.WaitFor(oven.search_a(packages[pkg].builder, 
+                                      bake.MatchArgs(argtest, collector)))
+
+  i2p = {}
+  for pkg in pkgs:
+    for d in built[pkg]:
+      for ifc in d:
+        if ifc in i2p:
+          if d[ifc] != i2p[ifc]:
+            i2p[ifc] = None
+        else:
+          i2p[ifc] = d[ifc]
+  ifc2pkg.update(i2p)
+  for pkg in pkgs:
+    for d in built[pkg]:
+      for ifc in d:
+        ifc2pkg[ifc] == d[ifc]
+          
+        
+
 def build_deps_a(ctx, interfaces):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
@@ -112,8 +156,8 @@ def build_deps_a(ctx, interfaces):
     got = yield async.WaitAny
     if got is None:
       break
-    pkg, delivs = got
-    deliverables[pkg] = delivs
+    ifc, delivs = got
+    deliverables[ifc2pkg[ifc]] = delivs
   env = envrealize(deliverables)
   yield async.Result(env)
 
@@ -207,4 +251,16 @@ def envrealize(deliverables):
     origv = [] if origv is None else origv.split(os.pathsep)
     newv = v - set(origv)
     env[k] = os.pathsep.join(sorted(newv) + origv)
+  return env
+
+#
+# build script convience functions
+#
+
+def c_realize(delivs):
+  """Creates a basic environment with PATH, LD_LIBRARY_PATH, and C_INCLUDE_PATH."""
+  root = delivs['root']
+  env = {'PATH': [os.path.join(root, 'bin')],
+         'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
+         'C_INCLUDE_PATH': [os.path.join(root, 'include')]}
   return env
