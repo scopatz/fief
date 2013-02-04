@@ -19,7 +19,7 @@ def main(ns, conf):
     oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
     repo.Cmd.showout = ns.verbose
     yield async.WaitFor(repo.init_a(oven, repos['packages']))
-    configuration.preferences.update(conf.get('preferences', ()))
+    configuration._init(conf)
     activated = _magic.env_active_set(conf)
     ans = yield async.WaitFor(deliver.deliver_a(oven, activated))
     yield async.Result(ans)
