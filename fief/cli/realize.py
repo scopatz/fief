@@ -2,7 +2,7 @@ import os
 import sys
 from .. import async
 from .. import bake
-from .. import magic
+from .. import repo
 from .. import deliver
 import _magic
 
@@ -11,14 +11,14 @@ USAGE = ("Realizes a fief active set."
 
 def main(ns, conf):
   """Realizes a fief active set."""
-  repo = {}
-  execfile(os.path.join('repo', '__repo__.py'), repo, repo)
+  repos = {}
+  execfile(os.path.join('repo', '__repo__.py'), repos, repos)
   
   def top_a():
     oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
-    magic.Cmd.showout = ns.verbose
-    yield async.WaitFor(magic.init_a(oven, repo['packages']))
-    magic.preferences.update(conf.get('preferences', ()))
+    repo.Cmd.showout = ns.verbose
+    yield async.WaitFor(repo.init_a(oven, repos['packages']))
+    repo.preferences.update(conf.get('preferences', ()))
     activated = _magic.env_active_set(conf)
     ans = yield async.WaitFor(deliver.deliver_a(oven, activated))
     yield async.Result(ans)
@@ -28,6 +28,6 @@ def main(ns, conf):
   except Exception, e:
     print>>sys.stderr, e.async_traceback
     raise
-  env = magic.evnrealize(deliverables)
+  env = repo.evnrealize(deliverables)
   _magic.exportvars(env)
   return 0

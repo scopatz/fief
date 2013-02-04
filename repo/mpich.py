@@ -1,6 +1,6 @@
 import os
-from fief import magic
-from fief.magic import ifc, async, Cmd
+from fief import repo
+from fief.repo import ifc, async, Cmd
 
 interfaces = {'mpi3': ifc(libs=('mpich3')),
               'mpi2': ifc(libs=('mpich3')),
@@ -9,7 +9,7 @@ interfaces = {'mpi3': ifc(libs=('mpich3')),
 
 def build_a(ctx):
   pkg = ctx['pkg']
-  src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))
+  src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
 
   try:
     to = yield async.WaitFor(ctx.outfile_a('build'))

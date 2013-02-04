@@ -6,15 +6,15 @@ import subprocess
 
 import async
 import bake
-import magic
+import repo
 
 def deliver_a(oven, active_ifcs):
   reqs = set()
   for ifc in active_ifcs:
-    reqs |= magic.requirements(ifc)
+    reqs |= repo.requirements(ifc)
     reqs.add(ifc)
   
-  ifc2pkg = magic.active_packages(reqs)
+  ifc2pkg = repo.active_packages(reqs)
   
   args = {}
   pkgs = set()
@@ -26,7 +26,7 @@ def deliver_a(oven, active_ifcs):
   for pkg in pkgs:
     args1 = dict(args)
     args1['pkg'] = pkg
-    yield async.Task(pkg, oven.memo_a(magic.packages[pkg].builder, args1))
+    yield async.Task(pkg, oven.memo_a(repo.packages[pkg].builder, args1))
   
   deliverables = {}
   while True:

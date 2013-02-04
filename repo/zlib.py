@@ -1,6 +1,6 @@
 import os
-from fief import magic
-from fief.magic import ifc, async, Cmd
+from fief import repo
+from fief.repo import ifc, async, Cmd
 
 interfaces = {'zlib': ifc(libs='z')}
 
@@ -12,7 +12,7 @@ def realize(delivs):
 
 def build_a(ctx):
   pkg = ctx['pkg']
-  src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))
+  src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
   try:  
     to = yield async.WaitFor(ctx.outfile_a('build', pkg))
     to = os.path.abspath(to)

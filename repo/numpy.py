@@ -1,13 +1,13 @@
 import os
-from fief import magic
-from fief.magic import ifc, async, bake
+from fief import repo
+from fief.repo import ifc, async, bake
 
 interfaces = {'numpy': ifc(requires='atlas')}
 
 def build_a(ctx):
     pkg = ctx['pkg']
-    src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))
-    paths = yield async.WaitFor(magic.build_deps_a(ctx, interfaces))
+    src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
+    paths = yield async.WaitFor(repo.build_deps_a(ctx, interfaces))
   
     to = yield async.WaitFor(ctx.outfile_a('build'))
     to = os.path.abspath(to)

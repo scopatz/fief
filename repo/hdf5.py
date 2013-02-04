@@ -1,7 +1,7 @@
 import os
 import sys
-from fief import magic
-from fief.magic import ifc, async, Cmd
+from fief import repo
+from fief.repo import ifc, async, Cmd
 
 interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')), 
               'hdf5-cpp': ifc(subsumes='hdf5', libs=('hdf5_cpp', 'hdf5_hl_cpp')), 
@@ -17,11 +17,11 @@ def realize(delivs):
 
 def build_a(ctx):
   pkg = ctx['pkg']
-  src, cleanup = yield async.WaitFor(magic.fetch_nomemo_a(ctx, pkg))
+  src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
 
   try:
     parl = ctx['interface','hdf5-parallel']
-    paths = yield async.WaitFor(magic.build_deps_a(ctx, interfaces))
+    paths = yield async.WaitFor(repo.build_deps_a(ctx, interfaces))
     zlib_dir = paths['zlib']  
     mpi_dir = paths['mpi2'] if parl is not None else None
   
