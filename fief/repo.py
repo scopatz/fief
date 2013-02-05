@@ -7,6 +7,7 @@ import itertools
 import conf
 import bake
 import async
+import fetch
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
@@ -15,6 +16,11 @@ def fetch_nomemo_a(ctx, pkg):
   ball = os.path.abspath(os.path.join(repo, p.source))
   name = os.path.split(ball)[-1].rsplit('.', 2)[0]
   bld = tempfile.mkdtemp()
+
+  if not os.path.exists(ball):
+    got = yield async.WaitFor(fetch.retrieve_source_a(p.source, ball, pkg))
+    if not got:
+      raise RuntimeError("failed to retrieve {0}".format(pkg))
   
   c = bake.Cmd(ctx)
   c.cwd = bld

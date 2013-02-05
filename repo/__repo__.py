@@ -7,3 +7,8 @@ packages = {
   'numpy': ('numpy-1.7.0rc1.tar.gz', 'numpy.py'),
   'atlas': ('atlas3.10.1.tar.bz2', 'atlas.py')
   }
+
+
+resources = {
+  'zlib-1.2.7.tar.gz': 'http://zlib.net/zlib-1.2.7.tar.gz',
+  }
