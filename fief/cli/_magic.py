@@ -4,8 +4,7 @@ import sys
 HOME = os.path.expanduser('~')
 
 
-def exportvars(currenv=None, origenv=None, 
-               fname=os.path.join(HOME, '.config', 'fiefexport')):
+def exportvars(currenv=None, origenv=None):
     """Takes an original envionment and prints out the environmental variable
     that have changed.  This file is exportable to the environment."""
     origenv = origenv or {}
@@ -16,12 +15,12 @@ def exportvars(currenv=None, origenv=None,
     s = " ".join(changed)
     sys.stdout.write(s)
 
-def env_active_set(conf=None):
-    """Gets the active set of interfaces from the environment."""
-    actenv = os.getenv('FIEF_ACTIVE_SET', '')    
-    actenv = set([ae.strip() for ae in actenv.split(',')])
-    actenv.discard('')
-    if 0 == len(actenv):
+def env_selection(conf=None):
+    """Gets the current interface selections from the environment."""
+    selenv = os.getenv('FIEF_SELECTION', '')    
+    selenv = set([s.strip() for s in selenv.split(',')])
+    selenv.discard('')
+    if 0 == len(selenv):
         conf = conf or {}
-        actenv = set(conf.get('interfaces', ()))
-    return actenv
+        selenv = set(conf.get('interfaces', ()))
+    return selenv

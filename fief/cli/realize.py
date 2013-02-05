@@ -20,14 +20,14 @@ def main(ns, config):
     repo.Cmd.showout = ns.verbose
     yield async.WaitFor(repo.init_a(oven, repos['packages']))
     conf._init(config)
-    activated = _magic.env_active_set(config)
+    activated = _magic.env_selection(config)
     ans = yield async.WaitFor(deliver.deliver_a(oven, activated, ns.lazy))
     yield async.Result(ans)
   
   try:
     deliverables = async.run(top_a())
   except Exception, e:
-    print>>sys.stderr, e.async_traceback
+    sys.stderr.write(str(e.async_traceback) + '\n')
     raise
   env = repo.envrealize(deliverables)
   _magic.exportvars(env)

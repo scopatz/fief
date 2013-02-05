@@ -74,28 +74,28 @@ def _make_argparser():
     # realize command
     cmds.add('realize')
     subparser = subparsers.add_parser('realize', 
-                    help="creates an active set of interfaces.")
+                    help="creates a selection of interfaces.")
     add_conf(subparser)
     add_lazy(subparser)
     add_verbose(subparser)
 
-    # active
-    cmds.add('active')
-    subparser = subparsers.add_parser('active', 
-                    help="displays the active interfaces.")
+    # selection
+    cmds.add('selection')
+    subparser = subparsers.add_parser('selection', 
+                    help="displays the current interface selections.")
     add_conf(subparser)
 
-    # activate
-    cmds.add('activate')
-    subparser = subparsers.add_parser('activate', 
+    # select
+    cmds.add('select')
+    subparser = subparsers.add_parser('select', 
                     help="add interfaces to the current environment.")
     add_conf(subparser)
     add_verbose(subparser)
     add_ifcs(subparser)
 
-    # deactivate
-    cmds.add('deactivate')
-    subparser = subparsers.add_parser('deactivate',
+    # deselect
+    cmds.add('deselect')
+    subparser = subparsers.add_parser('deselect',
                     help="removes interfaces from the current environment.")
     add_conf(subparser)
     add_verbose(subparser)
