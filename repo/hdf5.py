@@ -13,11 +13,12 @@ realize = repo.c_realize
 
 def build_a(ctx):
   pkg = ctx['pkg']
-  src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
+  assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
 
   try:
-    parl = ctx['interface','hdf5-parallel']
-    env = yield async.WaitFor(repo.build_deps_a(ctx, interfaces))
+    parl = (ctx['interface', 'hdf5-parallel'] == pkg)
+    env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
+    src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
   
     to = yield async.WaitFor(ctx.outfile_a('build', pkg))
     to = os.path.abspath(to)

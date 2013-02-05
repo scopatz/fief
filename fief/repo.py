@@ -138,7 +138,7 @@ def upgrade_to_avoid_a(oven, ifc2pkg):
           
         
 
-def build_deps_a(ctx, interfaces):
+def realize_deps_a(ctx, interfaces):
   """Given interfaces data structure, return built hash directories of all 
   active requirements."""
   deps = set()
@@ -264,3 +264,52 @@ def c_realize(delivs):
          'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
          'C_INCLUDE_PATH': [os.path.join(root, 'include')]}
   return env
+
+def configure_make_make_install(interfaces, configure_opts=(), 
+                                make_opts=(), make_install_opts=()):
+  """Constructs an asynchronous builder for a standard configure, 
+  make, make install package.
+  """
+  def build_a(ctx):
+    pkg = ctx['pkg']
+    assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
+
+    try:
+      env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
+      src, cleanup = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
+  
+      to = yield async.WaitFor(ctx.outfile_a('build', pkg))
+      to = os.path.abspath(to)
+      os.mkdir(to)
+  
+      c = Cmd(ctx)
+      c.cwd = src
+      c.tag = pkg
+      c.env = env
+      c.lit('./configure', '--prefix=' + to, configure_opts)
+      yield async.WaitFor(c.exec_a())
+  
+      c = Cmd(ctx)
+      c.cwd = src
+      c.tag = pkg
+      c.env = env
+      c.lit(conf.make, make_opts)
+      yield async.WaitFor(c.exec_a())
+
+      c = Cmd(ctx)
+      c.cwd = src
+      c.tag = pkg
+      c.env = env
+      c.lit(conf.make_install, make_install_opts)
+      yield async.WaitFor(c.exec_a())
+    finally:
+      cleanup()
+
+    libs = set()
+    for key, ifc in interfaces.items():
+      if ctx['interface', key] is not None:
+        libs |= ifc.libs
+    delivs = {'root': to, 'libs': libs, 'pkg': pkg}
+    yield async.Result(delivs)
+
+  return build_a

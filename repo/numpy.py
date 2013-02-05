@@ -6,8 +6,8 @@ interfaces = {'numpy': ifc(requires='atlas')}
 
 def build_a(ctx):
     pkg = ctx['pkg']
+    env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
     src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
-    paths = yield async.WaitFor(repo.build_deps_a(ctx, interfaces))
   
     to = yield async.WaitFor(ctx.outfile_a('build'))
     to = os.path.abspath(to)
@@ -15,6 +15,7 @@ def build_a(ctx):
   
     c = bake.Cmd(ctx)
     c.cwd = src
+    c.env = env
     c.lit('python', 'setup.py', 'install', '--prefix=' + to)
     yield async.WaitFor(c.exec_a())
   
