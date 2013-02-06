@@ -1,7 +1,10 @@
 import os
+import re
 import sys
 
 HOME = os.path.expanduser('~')
+
+WHITESPACE = re.compile("\s")
 
 
 def exportvars(currenv=None, origenv=None):
@@ -10,15 +13,19 @@ def exportvars(currenv=None, origenv=None):
     origenv = origenv or {}
     if currenv is None:
         currenv = dict(os.environ)
-    changed = ['{0}={1}'.format(k, v) for k, v in currenv.iteritems() \
-               if (k not in origenv) or (v != origenv[k])]
+    changed = []
+    for k, v in currenv.iteritems():
+        if (k not in origenv) or (v != origenv[k]):
+            m = WHITESPACE.search(v)
+            var = '{0}={1}'.format(k, v) if m is None else '{0}="{1}"'.format(k, v)
+            changed.append(var)
     s = " ".join(changed)
     sys.stdout.write(s)
 
 def env_selection(conf=None):
     """Gets the current interface selections from the environment."""
     selenv = os.getenv('FIEF_SELECTION', '')    
-    selenv = set([s for s in selenv.split()])
+    selenv = set(selenv.replace("'", '').replace('"', '').split())
     selenv.discard('')
     if 0 == len(selenv):
         conf = conf or {}
@@ -74,7 +81,7 @@ def bashcompgen(parser):
         for a in subparser._actions:
             args += a.option_strings
             if a.dest == 'ifcs':
-                args.append("${FIEF_SELECTION}")
+                args.append("${FIEF_KNOWN_INTERFACES}")
         cmdswitch.append(_bashcaseargs.format(name=name, args=" ".join(args)))
     kw['cmdswitch'] = "\n".join(cmdswitch)
     bashcomp = _bashcomptemplate.format(**kw)

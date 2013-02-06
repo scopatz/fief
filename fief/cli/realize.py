@@ -32,5 +32,6 @@ def main(ns, config):
     sys.stderr.write(str(e.async_traceback) + '\n')
     raise
   env = repo.envrealize(deliverables)
+  env['FIEF_KNOWN_INTERFACES'] = " ".join(set([ifc for ifc, pkg in repo.ifcpkg]))
   _magic.exportvars(env)
   return 0

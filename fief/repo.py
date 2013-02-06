@@ -208,7 +208,7 @@ def init_a(oven, repo_pkgs):
     execfile(os.path.join('repo', builder_py), ns, ns)
     yield async.Result(_pack_ifx(ns['interfaces']))
   
-  for name,tup in repo_pkgs.iteritems():
+  for name, tup in repo_pkgs.iteritems():
     pkg = Package(name, tup)
     packages[name] = pkg
     ifx = yield async.WaitFor(oven.memo_a(packed_ifx_a, {'builder_py':pkg.builder_py}))
