@@ -9,7 +9,7 @@ interfaces = {'cython': ifc()}
 
 def build_a(ctx):
     pkg = ctx['pkg']
-    src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
+    src, cleanup = yield async.WaitFor(repo.stage_nomemo_a(ctx, pkg))
   
     to = yield async.WaitFor(ctx.outfile_a('build'))
     to = os.path.abspath(to)

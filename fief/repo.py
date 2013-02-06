@@ -9,7 +9,19 @@ import bake
 import async
 import fetch
 
+
 def fetch_nomemo_a(ctx, pkg):
+  """Returns a tuple (path, cleanup)"""
+  repo = 'repo'
+  p = packages[pkg]
+  ball = os.path.abspath(os.path.join(repo, p.source))
+  if not os.path.exists(ball):
+    got = yield async.WaitFor(fetch.retrieve_source_a(p.source, ball, pkg))
+    if not got:
+      raise RuntimeError("failed to retrieve {0}".format(pkg))
+  yield async.Result(got)  
+
+def stage_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
   repo = 'repo'
   p = packages[pkg]
@@ -17,11 +29,6 @@ def fetch_nomemo_a(ctx, pkg):
   name = os.path.split(ball)[-1].rsplit('.', 2)[0]
   bld = tempfile.mkdtemp()
 
-  if not os.path.exists(ball):
-    got = yield async.WaitFor(fetch.retrieve_source_a(p.source, ball, pkg))
-    if not got:
-      raise RuntimeError("failed to retrieve {0}".format(pkg))
-  
   c = bake.Cmd(ctx)
   c.cwd = bld
   c.tag = pkg
@@ -141,12 +148,10 @@ def upgrade_to_avoid_a(oven, ifc2pkg):
     for d in built[pkg]:
       for ifc in d:
         ifc2pkg[ifc] == d[ifc]
-          
-        
 
-def realize_deps_a(ctx, interfaces):
-  """Given interfaces data structure, return built hash directories of all 
-  active requirements."""
+
+def dep2pkg_a(ctx, interfaces):
+  """Computes an ifc2pkg mapping for dependencies."""
   deps = set()
   for ifc in interfaces:
     pkg = ctx['interface', ifc]
@@ -154,6 +159,14 @@ def realize_deps_a(ctx, interfaces):
       continue
     deps |= requirements(ifc)
   ifc2pkg = dict([(dep, ctx['interface', dep]) for dep in deps])
+  yield async.Result(ifc2pkg)
+
+
+def realize_deps_a(ctx, interfaces):
+  """Given interfaces data structure, return the deliverables from all 
+  activated requirements, which of course, enforces that they have been
+  realized."""
+  ifc2pkg = yield async.WaitFor(dep2pkg_a(ctx, interfaces))
   deliverables = {}
   for ifc, pkg in ifc2pkg.iteritems():
     bld_a = packages[pkg].builder
@@ -282,7 +295,7 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
 
     try:
       env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
-      src, cleanup = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
+      src, cleanup = yield async.WaitFor(stage_nomemo_a(ctx, pkg))
   
       to = yield async.WaitFor(ctx.outfile_a('build', pkg))
       to = os.path.abspath(to)
