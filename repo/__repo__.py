@@ -1,6 +1,6 @@
 packages = {
   'zlib': ('zlib-1.2.7.tar.gz', 'zlib.py'),
-  'hdf5': ('hdf5-1.8.10-patch1.tar.gz', 'hdf5.py'),
+  'hdf5': ('hdf5-1.8.10-patch1.tar.bz2', 'hdf5.py'),
   'mpich': ('mpich-3.0.1.tar.gz', 'mpich.py'),
   'openmpi': ('openmpi-1.6.3.tar.bz2', 'openmpi.py'),
   'cython': ('Cython-0.18.tar.gz', 'cython.py'),
@@ -11,4 +11,6 @@ packages = {
 
 resources = {
   'zlib-1.2.7.tar.gz': 'http://zlib.net/zlib-1.2.7.tar.gz',
+  'mpich-3.0.1.tar.gz': 'http://www.mpich.org/static/tarballs/3.0.1/mpich-3.0.1.tar.gz', 
+  'hdf5-1.8.10-patch1.tar.bz2': 'http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2',
   }

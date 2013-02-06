@@ -44,12 +44,15 @@ def retrieve_http(url, filename, tag=None):
         msg += '{0:.1%} completed\n'.format(nblks / float(totblks))
         sys.stderr.write(msg)
     
-    try:
-        fname, hdrs = urllib.urlretrieve(url, filename, hook)
-        got = True
-    except urllib.ContentTooShortError:
-        got = False
-    yield async.Result(got)
+    def retriever():
+        try:
+            fname, hdrs = urllib.urlretrieve(url, filename, hook)
+            got = True
+        except urllib.ContentTooShortError:
+            got = False
+        return got
+
+    return retriever
 
 retrieve_https = retrieve_http
 
