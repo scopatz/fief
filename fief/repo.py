@@ -51,21 +51,21 @@ ensure_frozenset = lambda x: set(x if hasattr(x, '__iter__') else (x,))
 
 class ifc(object):
 
-  def __init__(self, subsumes=(), requires=(), libs=()):
+  def __init__(self, subsumes=(), requires=()):
     self.subsumes = ensure_frozenset(subsumes)
     self.requires = ensure_frozenset(requires)
-    self.libs = ensure_frozenset(libs)
 
   def __repr__(self):
-    s = "ifc(subsumes={0!r}, requires={1!r}, libs={2!r})"
-    return s.format(self.subsumes, self.requires, self.libs)
+    s = "ifc(subsumes={0!r}, requires={1!r})"
+    return s.format(self.subsumes, self.requires)
   
   @staticmethod
   def pack(me):
-    return (me.subsumes, me.requires, me.libs)
+    return (me.subsumes, me.requires)
+
   @staticmethod
   def unpack(x):
-    return ifc(x[0], x[1], x[2])
+    return ifc(x[0], x[1])
 
 def requirements(act):
   """Given an activated interface act, compute all requirements."""
@@ -271,8 +271,8 @@ def c_realize(delivs):
          'C_INCLUDE_PATH': [os.path.join(root, 'include')]}
   return env
 
-def configure_make_make_install(interfaces, configure_opts=(), 
-                                make_opts=(), make_install_opts=()):
+def configure_make_make_install(interfaces, libs=(), configure_args=(), 
+                                make_args=(), make_install_args=()):
   """Constructs an asynchronous builder for a standard configure, 
   make, make install package.
   """
@@ -292,30 +292,26 @@ def configure_make_make_install(interfaces, configure_opts=(),
       c.cwd = src
       c.tag = pkg
       c.env = env
-      c.lit('./configure', '--prefix=' + to, configure_opts)
+      c.lit('./configure', '--prefix=' + to, configure_args)
       yield async.WaitFor(c.exec_a())
   
       c = Cmd(ctx)
       c.cwd = src
       c.tag = pkg
       c.env = env
-      c.lit(conf.make, make_opts)
+      c.lit(conf.make, make_args)
       yield async.WaitFor(c.exec_a())
 
       c = Cmd(ctx)
       c.cwd = src
       c.tag = pkg
       c.env = env
-      c.lit(conf.make_install, make_install_opts)
+      c.lit(conf.make_install, make_install_args)
       yield async.WaitFor(c.exec_a())
     finally:
       cleanup()
 
-    libs = set()
-    for key, ifc in interfaces.items():
-      if ctx['interface', key] is not None:
-        libs |= ifc.libs
-    delivs = {'root': to, 'libs': libs, 'pkg': pkg}
+    delivs = {'root': to, 'libs': ensure_frozenset(libs), 'pkg': pkg}
     yield async.Result(delivs)
 
   return build_a

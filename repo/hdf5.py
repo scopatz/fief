@@ -4,8 +4,8 @@ from fief import repo
 from fief import conf
 from fief.repo import ifc, async, Cmd
 
-interfaces = {'hdf5': ifc(requires='zlib', libs=('hdf5', 'hdf5_hl')), 
-              'hdf5-cpp': ifc(subsumes='hdf5', libs=('hdf5_cpp', 'hdf5_hl_cpp')), 
+interfaces = {'hdf5': ifc(requires='zlib'), 
+              'hdf5-cpp': ifc(subsumes='hdf5'), 
               'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2'),
               }
 
@@ -16,6 +16,7 @@ def build_a(ctx):
   assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
 
   try:
+    cpp = (ctx['interface', 'hdf5-cpp'] == pkg)
     parl = (ctx['interface', 'hdf5-parallel'] == pkg)
     env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
     src, cleanup = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
@@ -49,9 +50,8 @@ def build_a(ctx):
   finally:
     cleanup()
 
-  libs = set()
-  for key, ifc in interfaces.items():
-    if ctx['interface', key] is not None:
-      libs |= ifc.libs
+  libs = set(('hdf5', 'hdf5_hl'))
+  if cpp:
+    libs |= set(('hdf5_cpp', 'hdf5_hl_cpp'))
   delivs = {'root': to, 'libs': libs, 'pkg': pkg}
   yield async.Result(delivs)
