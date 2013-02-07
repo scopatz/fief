@@ -50,7 +50,7 @@ def main(args=None):
 def _make_argparser():
     """Creates agrument parser for fief."""
     cmds = set()
-    parser = argparse.ArgumentParser(description='FLASH make utility.', )
+    parser = argparse.ArgumentParser(description='fief package manager', )
     subparsers = parser.add_subparsers(title='subcommands',
                                        description='valid subcommands',
                                        dest="cmd",
