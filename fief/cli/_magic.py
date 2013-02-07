@@ -3,9 +3,13 @@ import re
 import sys
 
 HOME = os.path.expanduser('~')
-
+WIN32 = (os.name == 'nt')
 WHITESPACE = re.compile("\s")
 
+def _ensure_config():
+    confdir = os.path.join(HOME, '.config')
+    if not os.path.exists(confdir):
+        os.makedirs(confdir)
 
 def exportvars(currenv=None, origenv=None):
     """Takes an original envionment and prints out the environmental variable
@@ -19,8 +23,14 @@ def exportvars(currenv=None, origenv=None):
             m = WHITESPACE.search(v)
             var = '{0}={1}'.format(k, v) if m is None else '{0}="{1}"'.format(k, v)
             changed.append(var)
-    s = " ".join(changed)
-    sys.stdout.write(s)
+    if WIN32:
+        s = "set " + "\nset ".join(changed) if 0 < len(changed) else ""
+        _ensure_config()
+        with open(os.path.join(HOME, '.config', 'fiefexport.bat'), 'w') as f:
+            f.write(s)
+    else:
+        s = " ".join(changed)
+        sys.stdout.write(s)
 
 def env_selection(conf=None):
     """Gets the current interface selections from the environment."""
