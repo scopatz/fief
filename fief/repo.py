@@ -19,7 +19,9 @@ def fetch_nomemo_a(ctx, pkg):
     got = yield async.WaitFor(fetch.retrieve_source_a(p.source, ball, pkg))
     if not got:
       raise RuntimeError("failed to retrieve {0}".format(pkg))
-  yield async.Result(got)  
+  else:
+    got = True
+  yield async.Result(got)
 
 def stage_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
@@ -150,7 +152,7 @@ def upgrade_to_avoid_a(oven, ifc2pkg):
         ifc2pkg[ifc] == d[ifc]
 
 
-def dep2pkg_a(ctx, interfaces):
+def dep2pkg(ctx, interfaces):
   """Computes an ifc2pkg mapping for dependencies."""
   deps = set()
   for ifc in interfaces:
@@ -158,15 +160,15 @@ def dep2pkg_a(ctx, interfaces):
     if pkg is None:
       continue
     deps |= requirements(ifc)
-  ifc2pkg = dict([(dep, ctx['interface', dep]) for dep in deps])
-  yield async.Result(ifc2pkg)
+  ifc2pkg = dict((dep, ctx['interface', dep]) for dep in deps)
+  return ifc2pkg
 
 
 def realize_deps_a(ctx, interfaces):
   """Given interfaces data structure, return the deliverables from all 
   activated requirements, which of course, enforces that they have been
   realized."""
-  ifc2pkg = yield async.WaitFor(dep2pkg_a(ctx, interfaces))
+  ifc2pkg = dep2pkg(ctx, interfaces)
   deliverables = {}
   for ifc, pkg in ifc2pkg.iteritems():
     bld_a = packages[pkg].builder
