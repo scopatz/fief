@@ -40,8 +40,12 @@ def retrieve_http(url, filename, tag=None):
         totblks = 1 + fsize / bytes_per_blk
         if not (0 == nblks%(totblks/3) or totblks == nblks):
             return 
-        msg = '[GET' + ('] ' if tag is None else ': {0}] '.format(tag))
-        msg += '{0:.1%} completed\n'.format(nblks / float(totblks))
+        if nblks == 0:
+            msg = '[GET' + ('] ' if tag is None else ': {0}] '.format(tag))
+            msg += 'downloading {0} -> {1}\n'.format(url, filename)
+        else:
+            msg = '[GET' + ('] ' if tag is None else ': {0}] '.format(tag))
+            msg += '{0:.1%} completed\n'.format(nblks / float(totblks))
         sys.stderr.write(msg)
     
     def retriever():
