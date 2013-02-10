@@ -1,4 +1,9 @@
 import os
+import sys
+cwd = os.getcwd()
+if cwd not in sys.path:
+    sys.path.insert(0, cwd)
+
 import urllib
 import subprocess
 from zipfile import ZipFile
@@ -39,8 +44,7 @@ def mingw_get():
     rtn = subprocess.check_call([exe, 'update'])
     rtn = subprocess.check_call([exe, 'install', 'gcc', 'g++', 'fortran', 'gdb', 
                                  'mingw32-make', 'msys-base'])
-
-
+								 
 def main():
     setup()
     mingw_get()
