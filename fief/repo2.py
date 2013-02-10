@@ -234,17 +234,36 @@ class Repo(object):
     """maps interface and package to interfaces that are required."""
     pass
   
-  def choose_pkgs(me, ifcs):
-    pmap = {} # maps ifc to chosen pkg
+  def solve_pkgs(me, ifcs):
+    soln = {} # maps ifc to chosen pkg
     free = set(ifcs) # ifc's not yet in pmap
-    same = {} # maps ifc to partition representative
+    prep = {} # maps ifc to partition representative
+    pdep = {} # maps partition reps to tree depth
+    def same(a, b):
+      if a not in prep:
+        prep[a] = a
+        pdep[a] = 0
+      if b not in prep:
+        prep[b] = b
+        pdep[b] = 0
+      if pdep[a] < pdep[b]:
+        prep[a] = prep[b]
+        del 
+    def intro(ifc):
+      if ifc not in pmap and ifc not in free:
+        free.add(ifc)
+        for s in me.ifc_subs(ifc):
+          if 
     def branch():
       i = free.pop()
       for p in me.ifc_imps(i):
-        map[i] = p
+        pmap[i] = p
         deps = me.pkg_ifc_deps(p,i)
         for d in deps:
-          if d not in map:
+          if d not in pmap:
+            if d not in free:
+              # its new!
+              for 
             free.add(d)
       
   
