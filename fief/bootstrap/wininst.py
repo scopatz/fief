@@ -48,9 +48,11 @@ def mingw_install():
 								 
 def python_install():
     msipath = ensure_url(PYTHON_URL, 'python-2.7.3.msi')
-    rtn = subprocess.check_call(['msiexec.exe', '/q', 
-                                 '/i', '"{0}"'.format(msipath), 
-                                 'INSTALLDIR="{0}"'.format(FIEF)])
+    # may need to be '"{0}"'.format(msipath) and 
+    # 'TARGETDIR="{0}"'.format(FIEF) on some systems
+    rtn = subprocess.check_call(['msiexec.exe', '/qn', 
+                                 '/i', '{0}'.format(msipath),   
+                                 'TARGETDIR={0}'.format(FIEF), 'ADDLOCAL=ALL'])
 								 
 def main():
     setup()
