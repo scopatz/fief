@@ -108,9 +108,9 @@ Name "${{COMPANYNAME}} - ${{APPNAME}}"
 outFile "${{APPNAME}}-install.exe"
 # Set zip info
 SetCompressor /FINAL lzma
-#SetCompressor /SOLID /FINAL lzma
 XPStyle on
 AutoCloseWindow true
+BrandingText "by John Bachan and Anthony Scopatz"
  
 !include LogicLib.nsh
  
@@ -134,7 +134,6 @@ section "install"
     ${{EnvVarUpdate}} $0 "PATH" "P" "HKCU" "$INSTDIR" 
     ${{EnvVarUpdate}} $0 "PATH" "P" "HKCU" "$INSTDIR\\bin"
     ${{EnvVarUpdate}} $0 "PATH" "P" "HKCU" "$INSTDIR\\msys\\1.0\\bin"
-    #${{EnvVarUpdate}} $0 "PATH" "P" "HKCU" "$INSTDIR\\msys\\1.0\\bin;$INSTDIR\\bin;$INSTDIR"
     
 	# Uninstaller - See function un.onInit and section "uninstall" for configuration
 	writeUninstaller "$INSTDIR\${{APPNAME}}-uninstall.exe"
@@ -156,10 +155,9 @@ section "uninstall"
     ${{un.EnvVarUpdate}} $0 "PATH" "R" "HKCU" "$INSTDIR" 
     ${{un.EnvVarUpdate}} $0 "PATH" "R" "HKCU" "$INSTDIR\\bin"
     ${{un.EnvVarUpdate}} $0 "PATH" "R" "HKCU" "$INSTDIR\msys\\1.0\\bin"
-    #${{un.EnvVarUpdate}} $0 "PATH" "R" "HKCU" "$INSTDIR\\msys\\1.0\\bin;$INSTDIR\\bin;$INSTDIR"
 
 	# Remove files
-	delete $INSTDIR\*
+	delete $INSTDIR\\*
  
 	# Always delete uninstaller as the last action
 	delete $INSTDIR\uninstall.exe
@@ -185,9 +183,9 @@ def run_nsis():
     
 def main():
     setup()
-    #mingw_install()
-    #python_install()
-    #fief_install()
+    mingw_install()
+    python_install()
+    fief_install()
     run_nsis()
 
 if __name__ == '__main__':
