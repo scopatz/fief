@@ -30,7 +30,7 @@ def main_setup():
 
 def main():
     make_bash_completion()
-    #main_setup()
+    main_setup()
 
 if __name__ == '__main__':
     main()

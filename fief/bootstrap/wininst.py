@@ -60,7 +60,8 @@ def python_install():
 
 def fief_install():
     pypath = os.path.join(FIEF, 'python.exe')
-    rtn = subprocess.call([pypath, 'setup.py', 'install'])
+    rtn = subprocess.call([pypath, 'setup.py', 'install', 
+                           '--install-scripts={0}'.format(os.path.join(FIEF, 'bin'))])
 
 def main():
     setup()
