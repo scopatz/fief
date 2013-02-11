@@ -23,7 +23,7 @@ def ensure_dir(d):
 
 def ensure_url(url, fname):
     fpath = os.path.join(DOWNLOADS, fname)
-    if os.path.exists(fname):
+    if os.path.exists(fpath):
         return fpath
     retriever = retrieve_http(url, fpath, tag=fname)
     got = retriever()
@@ -46,7 +46,7 @@ def mingw_install():
     rtn = subprocess.check_call([exe, 'install', 'gcc', 'g++', 'fortran', 'gdb', 
                                  'mingw32-make', 'msys-base'])
 								 
-def python_url():
+def python_install():
     msipath = ensure_url(PYTHON_URL, 'python-2.7.3.msi')
     rtn = subprocess.check_call(['msiexec.exe', '/q', 
                                  '/i', '"{0}"'.format(msipath), 
@@ -54,7 +54,8 @@ def python_url():
 								 
 def main():
     setup()
-    mingw_get()
+    mingw_install()
+    python_install()
 
 if __name__ == '__main__':
     main()
