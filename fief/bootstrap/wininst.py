@@ -1,3 +1,7 @@
+"""Creates a Windows installer for fief.  This requires that NSIS and Python 
+already be installed on the system and a fairly solid internet connection.
+"""
+
 import os
 import sys
 cwd = os.getcwd()
@@ -33,7 +37,7 @@ def ensure_url(url, fname):
 
 
 def setup():
-    dirs = [BUILD, DOWNLOADS, FIEF]
+    dirs = (BUILD, DOWNLOADS, FIEF)
     for d in dirs:
         ensure_dir(d)
 
@@ -53,11 +57,16 @@ def python_install():
     rtn = subprocess.check_call(['msiexec.exe', '/qn', 
                                  '/i', '{0}'.format(msipath),   
                                  'TARGETDIR={0}'.format(FIEF), 'ADDLOCAL=ALL'])
-								 
+
+def fief_install():
+    pypath = os.path.join(FIEF, 'python.exe')
+    rtn = subprocess.call([pypath, 'setup.py', 'install'])
+
 def main():
     setup()
     mingw_install()
     python_install()
+    fief_install()
 
 if __name__ == '__main__':
     main()
