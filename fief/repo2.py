@@ -213,6 +213,56 @@ class Package(object):
     if me._realizer is None: me._load()
     return me._realizer
 
+class Partitions(object):
+  def __init__(me):
+    me._rep = {}
+    me._dep = {}
+  
+  def __getitem__(me, x):
+    rep = me._rep
+    while x in rep and x != rep[x]:
+      x = rep[x]
+    return x
+  
+  def merge(a, b):
+    rep, dep = me._rep, me._dep
+    
+    if a not in rep:
+      rep[a] = a
+      dep[a] = 0
+    if b not in rep:
+      rep[b] = b
+      dep[b] = 0
+    
+    while rep[a] != a:
+      a = rep[a]
+    while rep[b] != b:
+      b = rep[b]
+    
+    if a == b:
+      return None
+    
+    if dep[a] < dep[b]:
+      rep[a] = b
+      undo = (a, dep[b])
+    elif dep[a] > dep[b]:
+      rep[b] = a
+      undo = (b, dep[a])
+    else:
+      rep[a] = b
+      undo = (a, dep[b])
+      dep[b] += 1
+    
+    return undo
+  
+  def unmerge(undo):
+    rep, dep = me._rep, me._dep
+    if undo is not None:
+      a, bd = undo
+      b = rep[a]
+      rep[a] = a
+      dep[b] = bd
+    
 class Repo(object):
   def __init__(me):
     pass
@@ -237,34 +287,30 @@ class Repo(object):
   def solve_pkgs(me, ifcs):
     soln = {} # maps ifc to chosen pkg
     free = set(ifcs) # ifc's not yet in pmap
-    prep = {} # maps ifc to partition representative
-    pdep = {} # maps partition reps to tree depth
-    def same(a, b):
-      if a not in prep:
-        prep[a] = a
-        pdep[a] = 0
-      if b not in prep:
-        prep[b] = b
-        pdep[b] = 0
-      if pdep[a] < pdep[b]:
-        prep[a] = prep[b]
-        del 
+    part = Partitions()
+    
     def intro(ifc):
-      if ifc not in pmap and ifc not in free:
+      if ifc not in soln and ifc not in free:
         free.add(ifc)
+        undos = []
         for s in me.ifc_subs(ifc):
-          if 
+          u = part.merge(s, ifc)
+          undos.append((lambda u: lambda: part.unmerge(u))(u))
+        undos.reverse()
+        def undo():
+          for u in undos: u()
+          free.discard(ifc)
+      else:
+        def undo(): pass
+      return undo
+    
     def branch():
       i = free.pop()
       for p in me.ifc_imps(i):
-        pmap[i] = p
+        soln[i] = p
         deps = me.pkg_ifc_deps(p,i)
         for d in deps:
-          if d not in pmap:
-            if d not in free:
-              # its new!
-              for 
-            free.add(d)
+          u = intro(d)
       
   
 packages = {}
