@@ -12,21 +12,17 @@ import fetch
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
-  repo = 'repo'
-  p = packages[pkg]
-  ball = os.path.abspath(os.path.join(repo, p.source))
-  got = os.path.exists(ball)
-  if not got: 
-    got = yield async.WaitFor(fetch.retrieve_source_a(p.source, ball, pkg))
+  got = yield async.WaitFor(fetch.retrieve_source_a(pkg))
   if not got:
     raise RuntimeError("failed to retrieve {0}".format(pkg))
+  packages[pkg].source = got
   yield async.Result(got)
 
 def stage_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
   repo = 'repo'
   p = packages[pkg]
-  ball = os.path.abspath(os.path.join(repo, p.source))
+  ball = p.source
   name = os.path.split(ball)[-1].rsplit('.', 2)[0]
   bld = tempfile.mkdtemp()
 
@@ -293,6 +289,7 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
   def build_a(ctx):
     pkg = ctx['pkg']
     assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
+    psrc = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
 
     try:
       env = yield async.WaitFor(realize_deps_a(ctx, interfaces))

@@ -11,7 +11,7 @@ resources = {}
 def _url2local(rsrc):
     name = os.path.split(rsrc)[-1]
     h = hash(rsrc) % 0x100000000
-    path = os.path.join('oven', 'i', '{0:x}-{1}'.format(h, name))
+    path = os.path.abspath(os.path.join('oven', 'i', '{0:x}-{1}'.format(h, name)))
     return path
 
 def _canonical_resource(rsrc):
@@ -22,12 +22,12 @@ def _canonical_resource(rsrc):
             return [('https', rsrc, _url2local(rsrc))]
         elif rsrc.startswith('git://') or rsrc.startswith('git@') or \
              rsrc.endswith('.git'):
-            return [('git', rsrc, rsrc)]
+            return [('git', rsrc, os.path.abspath(rsrc))]
         else:
-            return [('file', rsrc, rsrc)]
+            return [('file', rsrc, os.path.abspath(os.path.join('repo', rsrc)))]
             #msg = "protocol not inferred for resource {0!r}"
             #raise ValueError(msg.format(rsrc))
-    elif 2 == len(rsrc) and rsrc[0] in PROTOCOLS:
+    elif 3 == len(rsrc) and rsrc[0] in PROTOCOLS:
         return [rsrc]
     else:
         rtn = []
@@ -35,8 +35,8 @@ def _canonical_resource(rsrc):
             rtn += _canonical_resource(r) 
         return rtn
 
-def _init(repo_pkgs):
-    for pkg, (rsrc, _) in resources.items():
+def _init(pkgs):
+    for pkg, (rsrc, _) in pkgs.items():
         resources[pkg] = _canonical_resource(rsrc)
 
 
@@ -54,6 +54,9 @@ def retrieve_http(url, filename, tag=None):
     
     def retriever():
         try:
+            dname = os.path.split(filename)[0]
+            if not os.path.exists(dname):
+                os.makedirs(dname)
             fname, hdrs = urllib.urlretrieve(url, filename, hook)
             got = True
         except urllib.ContentTooShortError:
@@ -73,14 +76,17 @@ def retrieve_hg(url, filename, tag=None):
 def retrieve_ssh(url, filename, tag=None):
     raise RuntimeError('secure shell retrieval not yet implemented')
 
-def retrieve_source_a(src, filename=None, pkg=None):
+def retrieve_source_a(pkg):
     glbs = globals()
-    filename = filename or src
-    rsrcs = resources[src]
-    got = False
-    for proto, url in rsrcs:
+    rsrcs = resources[pkg]
+    got = None
+    for proto, url, path in rsrcs:
+        if os.path.exists(path):
+            got = path
+            break
         retriever = glbs['retrieve_' + proto]
-        got = yield async.WaitFor(retriever(url, filename, pkg))
+        got = yield async.WaitFor(retriever(url, path, pkg))
         if got:
+            got = path
             break
     yield async.Result(got)
