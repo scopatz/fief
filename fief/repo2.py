@@ -383,7 +383,7 @@ class Repo(object):
           unbound_dels.append(i1)
       unbound.difference_update(unbound_dels)
       
-      for i in fresh:
+      for i in world_adds:
         i1 = part[i]
         if i1 not in bound and i1 not in unbound:
           unbound.add(i1)
