@@ -15,7 +15,7 @@ def fetch_nomemo_a(ctx, pkg):
   repo = 'repo'
   p = packages[pkg]
   ball = os.path.abspath(os.path.join(repo, p.source))
-  got = os.path.exists(ball):
+  got = os.path.exists(ball)
   if not got: 
     got = yield async.WaitFor(fetch.retrieve_source_a(p.source, ball, pkg))
   if not got:
