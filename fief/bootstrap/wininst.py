@@ -65,8 +65,9 @@ def python_install():
     msipath = ensure_url(PYTHON_URL, 'python-2.7.3.msi')
     # may need to be '"{0}"'.format(msipath) and 
     # 'TARGETDIR="{0}"'.format(FIEF) on some systems
+    rtn = subprocess.call(['msiexec.exe', '/qn', '/x', msipath,])
     rtn = subprocess.check_call(['msiexec.exe', '/qn', 
-                                 '/i', '{0}'.format(msipath),   
+                                 '/i', msipath,   
                                  'TARGETDIR={0}'.format(FIEF), 'ADDLOCAL=ALL'])
 
 def fief_install():
@@ -156,14 +157,13 @@ section "uninstall"
     ${{un.EnvVarUpdate}} $0 "PATH" "R" "HKCU" "$INSTDIR\\bin"
     ${{un.EnvVarUpdate}} $0 "PATH" "R" "HKCU" "$INSTDIR\msys\\1.0\\bin"
 
-	# Remove files
-	delete $INSTDIR\\*
+	# Remove files, somewhat dangerously
+	rmdir /r $INSTDIR
  
-	# Always delete uninstaller as the last action
-	delete $INSTDIR\uninstall.exe
- 
-	# Try to remove the install directory - this will only happen if it is empty
-	rmDir $INSTDIR
+    # a safe, less complete way is here.
+    #delete $INSTDIR\\*
+	#delete $INSTDIR\uninstall.exe  # Always delete uninstaller as the last action
+	#rmDir $INSTDIR # Try to remove the install directory - this will only happen if it is empty
 sectionEnd
 """
                            
