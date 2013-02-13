@@ -4,22 +4,29 @@ import urllib
 
 import async
 
-PROTOCOLS = set(['http', 'https', 'git', 'hg', 'ssh'])
+PROTOCOLS = set(['http', 'https', 'git', 'hg', 'ssh', 'file'])
 
 resources = {}
+
+def _url2local(rsrc):
+    name = os.path.split(rsrc)[-1]
+    h = hash(rsrc) % 0x100000000
+    path = os.path.join('oven', 'i', '{0:x}-{1}'.format(h, name))
+    return path
 
 def _canonical_resource(rsrc):
     if isinstance(rsrc, basestring):
         if rsrc.startswith('http://'):
-            return [('http', rsrc)]
+            return [('http', rsrc, _url2local(rsrc))]
         elif rsrc.startswith('https://'):
-            return [('https', rsrc)]
+            return [('https', rsrc, _url2local(rsrc))]
         elif rsrc.startswith('git://') or rsrc.startswith('git@') or \
              rsrc.endswith('.git'):
-            return [('git', rsrc)]
+            return [('git', rsrc, rsrc)]
         else:
-            msg = "protocol not inferred for resource {0!r}"
-            raise ValueError(msg.format(rsrc))
+            return [('file', rsrc, rsrc)]
+            #msg = "protocol not inferred for resource {0!r}"
+            #raise ValueError(msg.format(rsrc))
     elif 2 == len(rsrc) and rsrc[0] in PROTOCOLS:
         return [rsrc]
     else:
@@ -28,11 +35,9 @@ def _canonical_resource(rsrc):
             rtn += _canonical_resource(r) 
         return rtn
 
-
-def _init(repo_rsrcs):
-    resources.update(repo_rsrcs)
-    for k, v in resources.items():
-        resources[k] = _canonical_resource(v)
+def _init(repo_pkgs):
+    for pkg, (rsrc, _) in resources.items():
+        resources[pkg] = _canonical_resource(rsrc)
 
 
 def retrieve_http(url, filename, tag=None):
@@ -58,7 +63,6 @@ def retrieve_http(url, filename, tag=None):
     return retriever
 
 retrieve_https = retrieve_http
-
 
 def retrieve_git(url, filename, tag=None):
     raise RuntimeError('git retrieval not yet implemented')
