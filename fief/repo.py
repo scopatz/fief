@@ -3,6 +3,7 @@ import sys
 import shutil
 import tempfile
 import itertools
+from glob import glob
 
 import conf
 import bake
@@ -323,6 +324,46 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
       cleanup()
 
     delivs = {'root': to, 'libs': ensure_frozenset(libs), 'pkg': pkg}
+    yield async.Result(delivs)
+
+  return build_a
+
+
+def py_realize(delivs):
+  """Creates a basic environment with PATH and PYTHONPATH."""
+  root = delivs['root']
+  env = {'PATH': [os.path.join(root, 'bin')]}
+  pypath = glob(os.path.join(root, 'lib', 'python[0-9].[0-9]',  'site-packages'))
+  if 0 < len(pypath):
+    env['PYTHONPATH'] = pypath
+  return env
+
+
+def python_setup_install(interfaces):
+  """Constructs an asynchronous builder for a standard "python setup.py install"
+  package.  This only requires an interface.
+  """
+  def build_a(ctx):
+    pkg = ctx['pkg']
+    psrc = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
+    env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
+
+    try:
+      src, cleanup = yield async.WaitFor(stage_nomemo_a(ctx, pkg))
+      to = yield async.WaitFor(ctx.outfile_a('build', pkg))
+      to = os.path.abspath(to)
+      os.mkdir(to)
+
+      c = bake.Cmd(ctx)
+      c.cwd = src
+      c.tag = pkg
+      c.env = env
+      c.lit('python', 'setup.py', 'install', '--prefix=' + to)
+      yield async.WaitFor(c.exec_a())
+    finally:
+      cleanup()
+
+    delivs = {'root': to, 'pkg': pkg}
     yield async.Result(delivs)
 
   return build_a

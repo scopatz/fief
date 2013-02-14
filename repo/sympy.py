@@ -8,12 +8,7 @@ from fief.repo import ifc, async, bake
 interfaces = {'sympy': ifc(), 
               'sympy-cython': ifc(subsumes='sympy', requires='cython')}
 
-def realize(delivs):
-    root = delivs['root']
-    env = {'PATH': [os.path.join(root, 'bin')],
-           'PYTHONPATH': glob(os.path.join(root, 'lib', 'python[0-9].[0-9]', 'site-packages')),
-           }
-    return env
+realize = repo.py_realize
 
 def build_a(ctx):
     pkg = ctx['pkg']
