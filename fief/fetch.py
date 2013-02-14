@@ -1,6 +1,7 @@
 import os
 import sys
 import urllib
+import time
 
 import async
 
@@ -39,11 +40,11 @@ def _init(pkgs):
     for pkg, (rsrc, _) in pkgs.items():
         resources[pkg] = _canonical_resource(rsrc)
 
-
 def retrieve_http(url, filename, tag=None):
     def hook(nblks, bytes_per_blk, fsize):
+        r = min(max(3, int(fsize/1048576)), 1000) 
         totblks = 1 + fsize / bytes_per_blk
-        if not (0 == nblks%(totblks/3) or totblks == nblks):
+        if not (0 == nblks%(totblks/r) or totblks == nblks):
             return 
         msg = '[GET' + ('] ' if tag is None else ': {0}] '.format(tag))
         if nblks == 0:
