@@ -332,7 +332,10 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
 def py_realize(delivs):
   """Creates a basic environment with PATH and PYTHONPATH."""
   root = delivs['root']
-  env = {'PATH': [os.path.join(root, 'bin')]}
+  env = {}
+  bin = os.path.join(root, 'bin')
+  if os.path.exists(bin):
+    env['PATH'] = [bin]}
   pypath = glob(os.path.join(root, 'lib', 'python[0-9].[0-9]',  'site-packages'))
   if 0 < len(pypath):
     env['PYTHONPATH'] = pypath
