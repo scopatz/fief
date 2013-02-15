@@ -335,12 +335,14 @@ def py_realize(delivs):
   """Creates a basic environment with PATH and PYTHONPATH."""
   root = delivs['root']
   env = {}
-  bin = os.path.join(root, 'bin')
-  if os.path.exists(bin):
-    env['PATH'] = [bin]
-  pypath = glob(os.path.join(root, 'lib', 'python[0-9].[0-9]',  'site-packages'))
+  if os.path.exists(os.path.join(root, 'bin')):
+    env['PATH'] = [os.path.join(root, 'bin')]
+  elif os.path.exists(os.path.join(root, 'Scripts')):
+    env['PATH'] = [os.path.join(root, 'Scripts')]
+  pypath = glob(os.path.join(root, '*',  'site-packages')) + \
+           glob(os.path.join(root, '*', '*',  'site-packages'))
   if 0 < len(pypath):
-    env['PYTHONPATH'] = pypath
+    env['PYTHONPATH'] = set(pypath)
   return env
 
 

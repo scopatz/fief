@@ -69,6 +69,15 @@ def python_install():
     rtn = subprocess.check_call(['msiexec.exe', '/qn', 
                                  '/i', msipath,   
                                  'TARGETDIR={0}'.format(FIEF), 'ADDLOCAL=ALL'])
+    # patch up python to use mingw by default
+    dudir = os.path.join(FIEF, 'lib', 'distutils')
+    with open(os.path.join(dudir, 'distutils.cfg'), 'w') as f:
+        f.write('[build]\ncompiler=mingw32\n')
+    with open(os.path.join(dudir, 'cygwinccompiler.py'), 'r') as f:
+        ccc = f.read()
+    ccc = ccc.replace(' -mno-cygwin', '')
+    with open(os.path.join(dudir, 'cygwinccompiler.py'), 'w') as f:
+        f.write(ccc)
 
 def fief_install():
     pypath = os.path.join(FIEF, 'python.exe')
