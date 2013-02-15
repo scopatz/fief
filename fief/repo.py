@@ -306,7 +306,7 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
       c.cwd = src
       c.tag = pkg
       c.env = env
-      c.lit('./configure', '--prefix=', configure_args)
+      c.lit('./configure', '--prefix=' + to, configure_args)
       yield async.WaitFor(c.exec_a())
   
       c = Cmd(ctx)
