@@ -3,6 +3,7 @@ import sys
 import shutil
 import tempfile
 import itertools
+from glob import glob
 
 import conf
 import bake
@@ -12,21 +13,17 @@ import fetch
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
-  repo = 'repo'
-  p = packages[pkg]
-  ball = os.path.abspath(os.path.join(repo, p.source))
-  got = os.path.exists(ball)
-  if not got: 
-    got = yield async.WaitFor(fetch.retrieve_source_a(p.source, ball, pkg))
+  got = yield async.WaitFor(fetch.retrieve_source_a(pkg))
   if not got:
     raise RuntimeError("failed to retrieve {0}".format(pkg))
+  packages[pkg].source = got
   yield async.Result(got)
 
 def stage_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
   repo = 'repo'
   p = packages[pkg]
-  ball = os.path.abspath(os.path.join(repo, p.source))
+  ball = p.source
   name = os.path.split(ball)[-1].rsplit('.', 2)[0]
   bld = tempfile.mkdtemp()
   if os.name == 'nt':
@@ -295,6 +292,7 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
   def build_a(ctx):
     pkg = ctx['pkg']
     assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
+    psrc = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
 
     try:
       env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
@@ -328,6 +326,49 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
       cleanup()
 
     delivs = {'root': to, 'libs': ensure_frozenset(libs), 'pkg': pkg}
+    yield async.Result(delivs)
+
+  return build_a
+
+
+def py_realize(delivs):
+  """Creates a basic environment with PATH and PYTHONPATH."""
+  root = delivs['root']
+  env = {}
+  bin = os.path.join(root, 'bin')
+  if os.path.exists(bin):
+    env['PATH'] = [bin]}
+  pypath = glob(os.path.join(root, 'lib', 'python[0-9].[0-9]',  'site-packages'))
+  if 0 < len(pypath):
+    env['PYTHONPATH'] = pypath
+  return env
+
+
+def python_setup_install(interfaces):
+  """Constructs an asynchronous builder for a standard "python setup.py install"
+  package.  This only requires an interface.
+  """
+  def build_a(ctx):
+    pkg = ctx['pkg']
+    psrc = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
+    env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
+
+    try:
+      src, cleanup = yield async.WaitFor(stage_nomemo_a(ctx, pkg))
+      to = yield async.WaitFor(ctx.outfile_a('build', pkg))
+      to = os.path.abspath(to)
+      os.mkdir(to)
+
+      c = bake.Cmd(ctx)
+      c.cwd = src
+      c.tag = pkg
+      c.env = env
+      c.lit('python', 'setup.py', 'install', '--prefix=' + to)
+      yield async.WaitFor(c.exec_a())
+    finally:
+      cleanup()
+
+    delivs = {'root': to, 'pkg': pkg}
     yield async.Result(delivs)
 
   return build_a

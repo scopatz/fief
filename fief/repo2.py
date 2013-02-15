@@ -213,105 +213,208 @@ class Package(object):
     if me._realizer is None: me._load()
     return me._realizer
 
-class Partitions(object):
+class DisjointSets(object):
+  """ implements http://en.wikipedia.org/wiki/Disjoint-set_data_structure
+  Path compression is not done so that all merge operations are easily reversible.
+  """
   def __init__(me):
-    me._rep = {}
-    me._dep = {}
+    me._rep = {} # set representative, follow until x == rep[x]
+    me._dep = {} # representative tree depth
+    me._mbr = {} # representative members
+    me._log = [] # maintains the history of changes
   
   def __getitem__(me, x):
+    """Get the canonical representative for the set containing x."""
     rep = me._rep
-    while x in rep and x != rep[x]:
-      x = rep[x]
+    if x in rep:
+      x1 = rep[x]
+      while x != x1:
+        x = x1
+        x1 = rep[x1]
     return x
   
-  def merge(a, b):
-    rep, dep = me._rep, me._dep
-    
-    if a not in rep:
-      rep[a] = a
-      dep[a] = 0
-    if b not in rep:
-      rep[b] = b
-      dep[b] = 0
-    
-    while rep[a] != a:
-      a = rep[a]
-    while rep[b] != b:
-      b = rep[b]
-    
-    if a == b:
-      return None
-    
-    if dep[a] < dep[b]:
-      rep[a] = b
-      undo = (a, dep[b])
-    elif dep[a] > dep[b]:
-      rep[b] = a
-      undo = (b, dep[a])
+  def members(me, x):
+    """Get all members of the set that contains x."""
+    x = me[x]
+    if x in me._mbr:
+      return frozenset(me._mbr[x])
     else:
-      rep[a] = b
-      undo = (a, dep[b])
-      dep[b] += 1
-    
-    return undo
+      return frozenset([x])
   
-  def unmerge(undo):
-    rep, dep = me._rep, me._dep
-    if undo is not None:
-      a, bd = undo
+  def state(me):
+    return len(me._log)
+  
+  def merge(me, a, b):
+    """Union the two sets containing a and b."""
+    rep = me._rep
+    dep = me._dep
+    mbr = me._mbr
+    log = me._log
+    
+    def can(x):
+      if x not in rep:
+        rep[x] = x
+        dep[x] = 0
+        mbr[x] = set([x])
+      else:
+        x1 = rep[x]
+        while x != x1:
+          x = x1
+          x1 = rep[x1]
+      return x
+    
+    a = can(a)
+    b = can(b)
+    
+    if a != b:
+      if dep[a] <= dep[b]:
+        log.extend((a, dep[b]))
+        rep[a] = b
+        mbr[b].union_update(mbr[a])
+        if dep[a] == dep[b]:
+          dep[b] += 1
+      else:
+        log.extend((b, dep[a]))
+        rep[b] = a
+        mbr[a].union_update(mbr[b])
+  
+  def revert(me, st):
+    rep, dep, mbr = me._rep, me._dep, me._mbr
+    log = me._log
+    while st < len(log):
+      dep_b, a = log.pop(), log.pop()
       b = rep[a]
       rep[a] = a
-      dep[b] = bd
-    
+      mbr[b].difference_update(mbr[a])
+      dep[b] = dep_b
+
 class Repo(object):
   def __init__(me):
     pass
   def init_a(me, oven, pkg_defs):
     pass
+  
   def pkg_source(me, pkg):
     pass
   def pkg_builder(me, pkg):
     pass
   def pkg_realizer(me, pkg):
     pass
+  
   def ifc_subs(me, ifc):
-    """maps interface to set of interfaces it subsumes."""
+    """Maps interface to set of interfaces it subsumes, not necessarily 
+    closed under transitivity."""
     pass
   def ifc_imps(me, ifc):
-    """maps interface to set of packages that implements it."""
+    """Maps interface to set of packages that implements it."""
     pass
   def pkg_ifc_deps(me, pkg, ifc):
-    """maps interface and package to interfaces that are required."""
+    """Returns set of interfaces that are required if `pkg` were to implement `ifc`."""
     pass
   
   def solve_pkgs(me, ifcs):
-    soln = {} # maps ifc to chosen pkg
-    free = set(ifcs) # ifc's not yet in pmap
-    part = Partitions()
+    """Returns an iterable of dicts that map interfaces to packages.
+    Each dict will be complete with all dependencies and subsumed interfaces."""
     
-    def intro(ifc):
-      if ifc not in soln and ifc not in free:
-        free.add(ifc)
-        undos = []
-        for s in me.ifc_subs(ifc):
-          u = part.merge(s, ifc)
-          undos.append((lambda u: lambda: part.unmerge(u))(u))
-        undos.reverse()
-        def undo():
-          for u in undos: u()
-          free.discard(ifc)
-      else:
-        def undo(): pass
-      return undo
+    # solver state
+    part = DisjointSets() # equivalence partition for interface subsumption
+    world = set() # all interfaces seen so far
+    bound = {} # bound interfaces to packages
+    unbound = set(ifcs) # interfaces not yet bound
+    
+    # modify state of solver by binding ifc to pkg, returns `revert` lambda if
+    # successful, otherwise None.
+    def bind(ifc, pkg):
+      assert all(i not in bound for i in unbound)
+      assert ifc not in bound
+      assert ifc in unbound
+      
+      bound[ifc] = pkg
+      unbound.discard(ifc)
+      
+      world_adds = []
+      part_st = part.state()
+
+      loop = set([ifc])
+      loop.union_update(me.pkg_ifc_deps(pkg, ifc))
+
+      while len(loop) > 0:
+        more = []
+        for i in loop:
+          if i not in world:
+            world.add(i)
+            world_adds.append(i)
+            for s in me.ifc_subs(i):
+              if s not in world:
+                more.append(s)
+              part.merge(i, s)
+        loop = more
+      
+      bound_adds = {}
+      unbound_adds = []
+      unbound_dels = set()
+      
+      def revert():
+        part.revert(part_st)
+        world.difference_update(world_adds)
+        
+        for i in bound_adds:
+          del bound[i]
+        del bound[ifc]
+        
+        unbound.difference_update(unbound_adds)
+        unbound.union_update(unbound_dels)
+        unbound.add(ifc)
+      
+      for i in bound:
+        i1 = part[i]
+        if i1 != i:
+          if i1 in bound or i1 in bound_adds:
+            if bound[i] != bound.get(i1, bound_adds.get(i1)):
+              bound_adds.clear()
+              revert()
+              return None
+          else:
+            bound_adds[i1] = bound[i]
+      
+      for i1,p in bound_adds.iteritems():
+        bound[i1] = p
+      
+      for i in unbound:
+        i1 = part[i]
+        if i1 in bound:
+          unbound_dels.add(i1)
+      unbound.difference_update(unbound_dels)
+      
+      for i in world_adds:
+        i1 = part[i]
+        if i1 not in bound and i1 not in unbound:
+          unbound.add(i1)
+          unbound_adds.append(i1)
+      
+      return revert
     
     def branch():
-      i = free.pop()
-      for p in me.ifc_imps(i):
-        soln[i] = p
-        deps = me.pkg_ifc_deps(p,i)
-        for d in deps:
-          u = intro(d)
-      
+      if len(unbound) == 0:
+        # report a solution
+        yield dict((i,bound[part[i]]) for i in world)
+      else:
+        # pick the interface with the least number of implementing packages
+        i_min, ps_min = None, None
+        for i in unbound:
+          ps = me.ifc_imps(i)
+          if i_min is None or len(ps) < len(ps_min):
+            i_min, ps_min = i, ps
+        i, ps = i_min, ps_min
+        # bind interface to each possible package and recurse
+        for p in ps:
+          revert = bind(i, p)
+          if revert is not None:
+            for x in branch():
+              yield x
+            revert()
+    
+    return branch()
   
 packages = {}
 ifcpkg = set()

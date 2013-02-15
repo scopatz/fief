@@ -19,9 +19,10 @@ def main(ns, config):
   def top_a():
     oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
     repo.Cmd.showout = ns.verbose
-    yield async.WaitFor(repo.init_a(oven, repos['packages']))
+    pkgs = repos['packages']
+    yield async.WaitFor(repo.init_a(oven, pkgs))
     conf._init(config)
-    fetch._init(repos.get('resources', ()))
+    fetch._init(pkgs)
     activated = _magic.env_selection(config)
     ans = yield async.WaitFor(deliver.deliver_a(oven, activated, ns.lazy))
     yield async.Result(ans)
