@@ -293,9 +293,9 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
     pkg = ctx['pkg']
     assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
     psrc = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
+    env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
 
     try:
-      env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
       src, cleanup = yield async.WaitFor(stage_nomemo_a(ctx, pkg))
   
       to = yield async.WaitFor(ctx.outfile_a('build', pkg))
@@ -306,7 +306,7 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
       c.cwd = src
       c.tag = pkg
       c.env = env
-      c.lit('./configure', '--prefix=' + to, configure_args)
+      c.lit('./configure', '--prefix=', configure_args)
       yield async.WaitFor(c.exec_a())
   
       c = Cmd(ctx)

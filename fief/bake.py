@@ -53,6 +53,7 @@ class Cmd(object):
     me.showout = False
     me.showerr = True
     me.env = {}
+    me.executable = None #if os.name == 'nt' else None
     me.tag = None
   
   def lit(me, *toks):
@@ -91,7 +92,8 @@ class Cmd(object):
       pipe = subprocess.PIPE
       env = dict(os.environ)
       env.update(me.env)
-      p = subprocess.Popen(me._toks, cwd=me.cwd, env=env, stdin=pipe, stdout=pipe, stderr=pipe)
+      p = subprocess.Popen(me._toks, executable=me.executable, cwd=me.cwd, 
+                           env=env, stdin=pipe, stdout=pipe, stderr=pipe)
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
 
