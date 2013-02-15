@@ -4,14 +4,20 @@ import shutil
 
 import _magic
 
+def _checkrm(p):
+    if os.path.isdir(p):
+        shutil.rmtree(p)
+    elif os.path.isfile(p):
+        os.remove(p)
+
 def clean(ns, config):
     if ns.clean == 'all':
-        shutil.rmtree('oven')
+        _checkrm('oven')
     elif ns.clean == 'fetch':
-        shutil.rmtree(os.path.join('oven', 'i'))
+        _checkrm(os.path.join('oven', 'i'))
     elif ns.clean == 'build':
-        shutil.rmtree(os.path.join('oven', 'o'))
-        os.remove(os.path.join('oven', 'db'))
+        _checkrm(os.path.join('oven', 'o'))
+        _checkrm(os.path.join('oven', 'db'))
 
 def main(ns, config):
     """Manipulates the current oven."""
