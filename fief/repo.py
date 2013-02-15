@@ -337,7 +337,7 @@ def py_realize(delivs):
   env = {}
   bin = os.path.join(root, 'bin')
   if os.path.exists(bin):
-    env['PATH'] = [bin]}
+    env['PATH'] = [bin]
   pypath = glob(os.path.join(root, 'lib', 'python[0-9].[0-9]',  'site-packages'))
   if 0 < len(pypath):
     env['PYTHONPATH'] = pypath
