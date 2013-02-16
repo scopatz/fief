@@ -23,6 +23,8 @@ def exportvars(currenv=None, origenv=None):
             m = WHITESPACE.search(v)
             var = '{0}={1}'.format(k, v) if m is None else '{0}="{1}"'.format(k, v)
             changed.append(var)
+
+    # write exports
     if WIN32:
         s = "set " + "\nset ".join(changed) if 0 < len(changed) else ""
         _ensure_config()

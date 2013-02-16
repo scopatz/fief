@@ -245,31 +245,41 @@ ensure_envvalue = lambda v: set(v) if hasattr(v, '__iter__') else str(v)
 
 def envrealize(deliverables):
   """Returns an environment realized from a list of delivs tuples."""
-  env = {}
+  fief_envvars = {}
   for pkg, delivs in deliverables.iteritems():
     realizer = packages[pkg].realizer
     pkgenv = realizer(delivs)
     for k, v in pkgenv.iteritems():
-      if k not in env:
-        env[k] = ensure_envvalue(v)
+      if k not in fief_envvars:
+        fief_envvars[k] = ensure_envvalue(v)
       elif hasattr(v, '__iter__'):
-        if not hasattr(env[k], '__iter__'):
+        if not hasattr(fief_envvars[k], '__iter__'):
           msg = ("environment variables must both be containers or both be "
                  "scalars. For key {0!r} got {1!r} and {2!r}.")
-          raise ValueError(k, sorted(v), env[k])
-        env[k] |= ensure_envvalue(v)
+          raise ValueError(k, sorted(v), fief_envvars[k])
+        fief_envvars[k] |= ensure_envvalue(v)
       else:
         if v != k[v]:
           msg = ("scalars must have the same value. "
                  "For key {0!r} got {1!r} and {2!r}.")
-          raise ValueError(k, v, env[k])
-  for k, v in env.items():
-    if not hasattr(v, '__iter__'):
-      continue
-    origv = os.getenv(k, None)
-    origv = [] if origv is None else origv.split(os.pathsep)
-    newv = v - set(origv)
-    env[k] = os.pathsep.join(sorted(newv) + origv)
+          raise ValueError(k, v, fief_envvars[k])
+  env = {}
+  fief_envvars_orig = eval(os.getenv('FIEF_ENVVARS', '{}'))
+  for key, val in fief_envvars.items():
+    if hasattr(val, '__iter__'):
+      # sets lists (like PATH)
+      fevorigval = fief_envvars_orig.get(key, ())
+      origval = os.getenv(key, None)
+      origval = [] if origval is None else origval.split(os.pathsep)
+      origset = set(origval)
+      newval = [v for v in val if v not in origset]
+      newval += [v for v in origval if (v in fevorigval and v in val) or 
+                                       (v not in fevorigval)]
+      env[key] = os.pathsep.join(newval)
+    else:
+      # sets scalars
+      env[key] = val
+  env['FIEF_ENVVARS'] = repr(fief_envvars)
   return env
 
 #
