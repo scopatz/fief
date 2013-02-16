@@ -270,7 +270,7 @@ class Oven(object):
     _ensure_dirs(o)
     yield async.Result(o)
   
-  def _memo_a(me, par, fun_a, argmap):
+  def _memo_a(me, par, fun_a, argmap, hidden):
     def calc_a(log):
       ctx = _Context(me, par, argmap, log)
       try:
@@ -284,18 +284,18 @@ class Oven(object):
         yield async.WaitFor(ctx._flush_a())        
       yield async.Result(result)
     
-    funval = valtool.Hasher().eat(fun_a).digest()
+    funval = valtool.Hasher().eat(fun_a).eat(hidden).digest()
     view = _View(me, par, argmap)
     log = yield async.WaitFor(me._logdb.memo_a(funval, view, calc_a))
     yield async.Result(log)
   
-  def memo_a(me, fun_a, argroot):
+  def memo_a(me, fun_a, argroot, hidden=None):
     assert argroot is not None
     if isinstance(argroot, dict):
       argmap = lambda x,up: argroot.get(x, None)
     else:
       argmap = lambda x,up: argroot(x)
-    log = yield async.WaitFor(me._memo_a(None, fun_a, argmap))
+    log = yield async.WaitFor(me._memo_a(None, fun_a, argmap, hidden))
     yield async.Result(log.result()) # will throw if fun_a did, but thats ok
   
   def search_a(me, fun_a, match):
@@ -405,13 +405,13 @@ class _Context(_View):
       me._log.add(_tag_arg, x, y)
     return y
   
-  def __call__(me, fun_a, argmap=(lambda x,up: up(x))):
+  def memo_a(me, fun_a, argmap=(lambda x,up: up(x)), hidden=None):
     assert argmap is not None
     if isinstance(argmap, dict):
       d = argmap
       argmap = lambda x,up: d[x] if x in d else up(x)
     
-    log = yield async.WaitFor(me._oven._memo_a(me, fun_a, argmap))
+    log = yield async.WaitFor(me._oven._memo_a(me, fun_a, argmap, hidden))
     
     for tag,key,val in log.records():
       if tag == _tag_inp:
@@ -422,6 +422,9 @@ class _Context(_View):
         argmap(key, lambda x: me[x])
     
     yield async.Result(log.result())
+    
+  def __call__(me, fun_a, argmap=(lambda x,up: up(x))):
+    return me.memo_a(fun_a, argmap)
     
   def _flush_a(me):
     if len(me._inphold) > 0:
