@@ -90,5 +90,4 @@ def retrieve_source_a(pkg):
         if got:
             got = path
             break
-    sys.stderr.write()
     yield async.Result(got)

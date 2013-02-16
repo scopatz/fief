@@ -14,13 +14,13 @@ realize = repo.c_realize
 def build_a(ctx):
   pkg = ctx['pkg']
   assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
+  cpp = (ctx['interface', 'hdf5-cpp'] == pkg)
+  parl = (ctx['interface', 'hdf5-parallel'] == pkg)
+  psrc = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
+  env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
 
   try:
-    cpp = (ctx['interface', 'hdf5-cpp'] == pkg)
-    parl = (ctx['interface', 'hdf5-parallel'] == pkg)
-    env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
     src, cleanup = yield async.WaitFor(repo.stage_nomemo_a(ctx, pkg))
-  
     to = yield async.WaitFor(ctx.outfile_a('build', pkg))
     to = os.path.abspath(to)
     os.mkdir(to)
