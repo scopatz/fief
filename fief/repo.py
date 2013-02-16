@@ -264,7 +264,7 @@ def envrealize(deliverables):
                  "For key {0!r} got {1!r} and {2!r}.")
           raise ValueError(k, v, fief_envvars[k])
   env = {}
-  fief_envvars_orig = eval(os.getenv('FIEF_ENVVARS', '{}'))
+  fief_envvars_orig = eval(os.getenv('FIEF_ENVVARS', '{}').strip('"'))
   for key, val in fief_envvars.items():
     if hasattr(val, '__iter__'):
       # sets lists (like PATH)

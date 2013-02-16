@@ -21,7 +21,7 @@ def exportvars(currenv=None, origenv=None):
     for k, v in currenv.iteritems():
         if (k not in origenv) or (v != origenv[k]):
             m = WHITESPACE.search(v)
-            var = '{0}={1}'.format(k, v) if m is None else '{0}="{1}"'.format(k, v)
+            var = '{0}={1}'.format(k, v) if m is None or WIN32 else '{0}="{1}"'.format(k, v)
             changed.append(var)
 
     # write exports
