@@ -44,17 +44,17 @@ def _flatten(x):
     yield x
 
 class Cmd(object):
-  def __init__(me, ctx):
-    super(Cmd, me).__init__()
+  def __init__(me, ctx, cwd=None, env=None, executable=None, tag=None, 
+               showout=False, showerr=True):
     me._ctx = ctx
     me._toks = []
     me._oxs = {}
-    me.cwd = None
-    me.showout = False
-    me.showerr = True
-    me.env = {}
-    me.executable = None #if os.name == 'nt' else None
-    me.tag = None
+    me.cwd = cwd
+    me.env = env or {}
+    me.executable = executable # if os.name == 'nt' else None
+    me.tag = tag
+    me.showout = showout
+    me.showerr = showerr
   
   def lit(me, *toks):
     me._toks += _flatten(toks)
