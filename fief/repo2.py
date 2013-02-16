@@ -289,15 +289,55 @@ class DisjointSets(object):
       dep[b] = dep_b
 
 class Repo(object):
-  def __init__(me):
-    pass
   def init_a(me, oven, pkg_defs):
-    pass
+    def pack_ifx(ifx):
+      return dict((nm,ifc.pack(x)) for nm,x in ifx.iteritems())
+    def unpack_ifx(s):
+      return dict((nm,ifc.unpack(x)) for nm,x in s.iteritems())
+    
+    def packed_ifx_a(ctx):
+      py = ctx['py']
+      ns = {}
+      execfile(os.path.join('repo', py), ns, ns)
+      yield async.Result(pack_ifx(ns['interfaces']))
+    
+    pkg_src = {}
+    pkg_py = {}
+    pkg_ifx = {}
+    pkg_ifc_reqs = {} # {(pkg,ifc):set(ifc)}
+    ifc_imps = {}
+    ifc_subs = {}
+    
+    for pkg,tup in pkg_defs.iteritems():
+      pkg_src[pkg] = src = tup[0]
+      pkg_py[pkg] = py = tup[1]
+      ifx = yield async.WaitFor(oven.memo_a(packed_ifx_a, {'py':py}))
+      ifx = unpack_ifx(ifx)
+      pkg_ifx[pkg] = ifx
+      
+      for ifc in ifx:
+        ifc_imps[ifc] = ifc_imps.get(ifc, set())
+        ifc_imps[ifc].add(pkg)
+        ifc_subs[ifc] = ifc_subs.get(ifc, set())
+        ifc_subs[ifc].union_update(ifx[ifc].subsumes)
+        pkg_ifc_reqs[pkg,ifc] = ifx[ifc].requires
+    
+    me._pkg_src = pkg_src
+    me._pkg_py = pkg_py
+    me._pkg_ifx = pkg_ifx
+    me._pkg_stuff = {} # {pkg:(builder,realizer)}
+    me._pkg_ifc_reqs = pkg_ifc_reqs
+    me._ifc_imps = dict((ifc,frozenset(imps)) for ifc,imps in ifc_imps.iteritems())
+    me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
   
   def pkg_source(me, pkg):
-    pass
+    return me._pkg_src[pkg]
+  
+  def _pkg_get_stuff(me, pkg, 
+  
   def pkg_builder(me, pkg):
-    pass
+    if pkg not in me._pkg_stuff:
+    return me._pkg_
   def pkg_realizer(me, pkg):
     pass
   
