@@ -289,7 +289,7 @@ class DisjointSets(object):
       dep[b] = dep_b
 
 class Repo(object):
-  def init_a(me, oven, pkg_defs):
+  def init_a(me, oven, path, pkg_defs):
     def pack_ifx(ifx):
       return dict((nm,ifc.pack(x)) for nm,x in ifx.iteritems())
     def unpack_ifx(s):
@@ -310,7 +310,7 @@ class Repo(object):
     
     for pkg,tup in pkg_defs.iteritems():
       pkg_src[pkg] = src = tup[0]
-      pkg_py[pkg] = py = tup[1]
+      pkg_py[pkg] = py = os.path.join(path, tup[1])
       ifx = yield async.WaitFor(oven.memo_a(packed_ifx_a, {'py':py}))
       ifx = unpack_ifx(ifx)
       pkg_ifx[pkg] = ifx
@@ -334,23 +334,30 @@ class Repo(object):
     return me._pkg_src[pkg]
   
   def _pkg_get_stuff(me, pkg, 
+    if pkg not in me._pkg_stuff:
+      ns = {}
+      execfile(me._pkg_py[pkg], ns, ns)
+      me._pkg_stuff[pkg] = (ns['build_a'], ns.get('realize', lambda _:{}))
+    return me._pkg_stuff[pkg]
   
   def pkg_builder(me, pkg):
-    if pkg not in me._pkg_stuff:
-    return me._pkg_
+    return me._pkg_get_stuff(pkg)[0]
+  
   def pkg_realizer(me, pkg):
-    pass
+    return me._pkg_get_stuff(pkg)[1]
   
   def ifc_subs(me, ifc):
     """Maps interface to set of interfaces it subsumes, not necessarily 
     closed under transitivity."""
-    pass
+    return me._ifc_subs.get(ifc, frozenset())
+  
   def ifc_imps(me, ifc):
     """Maps interface to set of packages that implements it."""
-    pass
-  def pkg_ifc_deps(me, pkg, ifc):
+    return me._ifc_imps.get(ifc, frozenset())
+  
+  def pkg_ifc_reqs(me, pkg, ifc):
     """Returns set of interfaces that are required if `pkg` were to implement `ifc`."""
-    pass
+    return me._pkg_ifc_reqs.get((pkg,ifc), frozenset())
   
   def solve_pkgs(me, ifcs):
     """Returns an iterable of dicts that map interfaces to packages.
@@ -377,7 +384,7 @@ class Repo(object):
 
       loop = set([ifc])
       loop.union_update(me.pkg_ifc_deps(pkg, ifc))
-
+      
       while len(loop) > 0:
         more = []
         for i in loop:
@@ -390,7 +397,7 @@ class Repo(object):
               part.merge(i, s)
         loop = more
       
-      bound_adds = {}
+      bound_adds = set()
       unbound_adds = []
       unbound_dels = set()
       
@@ -406,19 +413,16 @@ class Repo(object):
         unbound.union_update(unbound_dels)
         unbound.add(ifc)
       
-      for i in bound:
+      for i in bound.keys():
         i1 = part[i]
         if i1 != i:
-          if i1 in bound or i1 in bound_adds:
-            if bound[i] != bound.get(i1, bound_adds.get(i1)):
-              bound_adds.clear()
+          if i1 in bound:
+            if bound[i] != bound[i1]:
               revert()
               return None
           else:
-            bound_adds[i1] = bound[i]
-      
-      for i1,p in bound_adds.iteritems():
-        bound[i1] = p
+            bound[i1] = bound[i]
+            bound_adds.add(i1)
       
       for i in unbound:
         i1 = part[i]
