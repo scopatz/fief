@@ -1,6 +1,6 @@
 from fief import repo
 
-interfaces = {'atlas': repo.ifc()}
+interfaces = {'atlas': repo.ifc(requires='cc')}
 
 realize = repo.c_realize
 

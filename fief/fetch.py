@@ -5,7 +5,7 @@ import time
 
 import async
 
-PROTOCOLS = set(['http', 'https', 'git', 'hg', 'ssh', 'file'])
+PROTOCOLS = set(['http', 'https', 'git', 'hg', 'ssh', 'file', 'dummy'])
 
 resources = {}
 
@@ -24,10 +24,14 @@ def _canonical_resource(rsrc):
         elif rsrc.startswith('git://') or rsrc.startswith('git@') or \
              rsrc.endswith('.git'):
             return [('git', rsrc, os.path.abspath(rsrc))]
+        elif rsrc == 'dummy':
+            return [('dummy', None, None)]
         else:
             return [('file', rsrc, os.path.abspath(os.path.join('repo', rsrc)))]
             #msg = "protocol not inferred for resource {0!r}"
             #raise ValueError(msg.format(rsrc))
+    elif rsrc is None:
+        return [('dummy', None, None)]
     elif 3 == len(rsrc) and rsrc[0] in PROTOCOLS:
         return [rsrc]
     else:

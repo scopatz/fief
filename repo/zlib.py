@@ -4,7 +4,7 @@ from fief import repo
 from fief import conf
 from fief.repo import ifc, async, Cmd
 
-interfaces = {'zlib': ifc()}
+interfaces = {'zlib': ifc(requires='cc')}
 
 def realize(delivs):
   env = repo.c_realize(delivs)
