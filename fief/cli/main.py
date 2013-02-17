@@ -1,6 +1,4 @@
 #! /usr/bin/env python
-
-import os
 import sys
 
 if sys.version_info[0] == 3 or sys.version_info[:2] == (2, 7):
@@ -8,13 +6,7 @@ if sys.version_info[0] == 3 or sys.version_info[:2] == (2, 7):
 else:
     from . import _argparse as argparse
 
-HOME = os.path.expanduser('~')
-
-CONFIGS = [os.path.join(HOME, '.config', 'fiefconf'),
-           os.path.join(HOME, '.config', 'fiefconf.py'),
-           os.path.abspath('fiefconf'), 
-           os.path.abspath('fiefconf.py'), 
-           ]
+from _conf import Conf
 
 
 def main(args=None):
@@ -24,12 +16,7 @@ def main(args=None):
     ns = parser.parse_args(args)
     if hasattr(ns, 'options'):
         ns.options = ns.options[1:] if ['--'] == ns.options[:1] else ns.options
-
-    config = {}
-    CONFIGS.append(ns.conf)
-    for conffile in CONFIGS:
-        if os.path.isfile(conffile):
-            execfile(conffile, config, config)
+    config = Conf()
 
     # Run the fief command, use dynamic import
     if '.' not in sys.path:

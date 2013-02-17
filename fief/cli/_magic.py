@@ -40,8 +40,10 @@ def env_selection(conf=None):
     selenv = set(selenv.replace("'", '').replace('"', '').split())
     selenv.discard('')
     if 0 == len(selenv):
-        conf = conf or {}
-        selenv = set(conf.get('interfaces', ()))
+        if conf is None:
+            selenv = set()
+        else:
+            selenv = conf.interfaces
     return selenv
 
 

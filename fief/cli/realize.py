@@ -4,7 +4,6 @@ from .. import async
 from .. import bake
 from .. import repo
 from .. import deliver
-from .. import conf
 from .. import fetch
 import _magic
 
@@ -21,7 +20,6 @@ def main(ns, config):
     repo.Cmd.showout = ns.verbose
     pkgs = repos['packages']
     yield async.WaitFor(repo.init_a(oven, pkgs))
-    conf._init(config)
     fetch._init(pkgs)
     activated = _magic.env_selection(config)
     ans = yield async.WaitFor(deliver.deliver_a(oven, activated, ns.lazy))
