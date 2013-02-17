@@ -19,8 +19,6 @@ def build_a(ctx):
   psrc = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
   env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
 
-
-  cmdkws = {'cwd': src, 'tag': pkg, 'env': env}
   try:
     src, cleanup = yield async.WaitFor(repo.stage_nomemo_a(ctx, pkg))
     cmdkws = {'cwd': src, 'tag': pkg, 'env': env}
