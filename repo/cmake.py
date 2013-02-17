@@ -5,7 +5,10 @@ from fief.repo import ifc, async, Cmd
 
 interfaces = {'cmake': ifc(requires='cc')}
 
-realize  = repo.c_realize
+def realize(delivs)
+  root = delivs['root']
+  env = {'PATH': [os.path.join(root, 'bin')]}
+  return env
 
 def build_a(ctx):
   pkg = ctx['pkg']
