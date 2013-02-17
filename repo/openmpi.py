@@ -1,8 +1,8 @@
 from fief import repo
 
-interfaces = {'mpi3': repo.ifc(),
-              'mpi2': repo.ifc(),
-              'mpi1': repo.ifc(),
+interfaces = {'mpi3': repo.ifc(requires='cc'),
+              'mpi2': repo.ifc(requires='cc'),
+              'mpi1': repo.ifc(requires='cc'),
               }
 
 realize = repo.c_realize

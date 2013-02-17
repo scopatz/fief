@@ -5,7 +5,7 @@ from fief import conf
 from fief import repo
 from fief.repo import ifc, async, bake
 
-interfaces = {'sympy': ifc(), 
+interfaces = {'sympy': ifc(requires='py'), 
               'sympy-cython': ifc(subsumes='sympy', requires='cython')}
 
 realize = repo.py_realize
@@ -18,22 +18,17 @@ def build_a(ctx):
 
     try:
         src, cleanup = yield async.WaitFor(repo.stage_nomemo_a(ctx, pkg))
+        cmdkws = {'cwd': src, 'tag': pkg, 'env': env}
         to = yield async.WaitFor(ctx.outfile_a('build', pkg))
         to = os.path.abspath(to)
         os.mkdir(to)
 
-        c = bake.Cmd(ctx)
-        c.cwd = src
-        c.tag = pkg
-        c.env = env
+        c = bake.Cmd(ctx, **cmdkws)
         c.lit('python', 'setup.py', 'install', '--prefix=' + to)
         yield async.WaitFor(c.exec_a())
 
         if cythonize:
-            c = bake.Cmd(ctx)
-            c.cwd = src
-            c.tag = pkg
-            c.env = env
+            c = bake.Cmd(ctx, **cmdkws)
             c.lit('python', 'build.py', 'install', '--prefix=' + to)
             yield async.WaitFor(c.exec_a())
     finally:

@@ -104,7 +104,7 @@ class Cmd(object):
     yield async.WaitFor(go)
     
     if me.showerr and me.stderr != '':
-      sys.stderr.write('-'*72 + '\n[ERR' + tag + me.shline + '\n' + me.stderr + \
+      sys.stderr.write('-'*72 + '\n[MSG' + tag + me.shline + '\n' + me.stderr + \
                        ("" if me.stderr[-1] == '\n' else '\n') + '-'*72 + '\n')
     if me.showout and me.stdout != '':
       sys.stderr.write('-'*72 + '\n[OUT' + tag + me.shline + '\n' + me.stdout + \

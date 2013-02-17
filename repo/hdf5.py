@@ -19,32 +19,24 @@ def build_a(ctx):
   psrc = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
   env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
 
+  cmdkws = {'cwd': src, 'tag': pkg, 'env': env}
   try:
     src, cleanup = yield async.WaitFor(repo.stage_nomemo_a(ctx, pkg))
     to = yield async.WaitFor(ctx.outfile_a('build', pkg))
     to = os.path.abspath(to)
     os.mkdir(to)
   
-    c = Cmd(ctx)
-    c.cwd = src
-    c.tag = pkg
-    c.env = env
+    c = Cmd(ctx, **cmdkws)
     c.lit('./configure', '--prefix=' + to)
     if parl:
       c.lit('--enable-parallel')
     yield async.WaitFor(c.exec_a())
   
-    c = Cmd(ctx)
-    c.cwd = src
-    c.tag = pkg
-    c.env = env
+    c = Cmd(ctx, **cmdkws)
     c.lit(conf.make)
     yield async.WaitFor(c.exec_a())
   
-    c = Cmd(ctx)
-    c.cwd = src
-    c.tag = pkg
-    c.env = env
+    c = Cmd(ctx, **cmdkws)
     c.lit(conf.make_install)
     yield async.WaitFor(c.exec_a())
   finally:
