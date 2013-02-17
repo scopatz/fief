@@ -5,7 +5,7 @@ from fief.repo import ifc, async, Cmd
 
 interfaces = {'cmake': ifc(requires='cc')}
 
-def realize(delivs)
+def realize(delivs):
   root = delivs['root']
   env = {'PATH': [os.path.join(root, 'bin')]}
   return env
