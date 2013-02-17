@@ -9,4 +9,5 @@ packages = {
   'openmpi': ('http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.3.tar.bz2', 'openmpi.py'),
   'sympy': ('https://github.com/sympy/sympy/archive/sympy-0.7.2.rc1.tar.gz', 'sympy.py'),
   'zlib': ('http://zlib.net/zlib-1.2.7.tar.gz', 'zlib.py'),
+  'cmake': ('http://www.cmake.org/files/v2.8/cmake-2.8.10.2.tar.gz', 'cmake.py'),
   }
