@@ -57,8 +57,7 @@ def build_a(ctx):
     c.lit(conf.make_install)
     yield async.WaitFor(c.exec_a())
   finally:
-    pass
-    #cleanup()
+    cleanup()
 
   libs = set(('hdf5', 'hdf5_hl'))
   if cpp:
