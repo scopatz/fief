@@ -1,4 +1,5 @@
 import os
+import shutil
 from fief import repo
 from fief import conf
 from fief.repo import ifc, async, Cmd
@@ -36,6 +37,8 @@ def build_a(ctx):
       c = Cmd(ctx, **cmdkws)
       c.lit(conf.make_install, '-f', 'win32/Makefile.gcc', 'SHARED_MODE=1')
       yield async.WaitFor(c.exec_a())
+      shutil.copy(os.path.join(to, 'lib', 'zlib1.dll'), 
+                  os.path.join(to, 'lib', 'libz.dll'))
     else:
       c = Cmd(ctx, **cmdkws)
       c.lit('./configure', '--prefix=' + to)
