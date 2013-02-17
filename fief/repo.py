@@ -24,7 +24,11 @@ def stage_nomemo_a(ctx, pkg):
   repo = 'repo'
   p = packages[pkg]
   ball = p.source
-  name = os.path.split(ball)[-1].rsplit('.', 2)[0]
+  if ball.endswith('.tgz'):
+    ndots = 1
+  elif ball.endswith('.tar.gz') or ball.endswith('.tar.bz2'):
+    ndots = 2
+  name = os.path.split(ball)[-1].rsplit('.', ndots)[0]
   bld = tempfile.mkdtemp()
   if os.name == 'nt':
     ball = ball.split(':', 1)[-1]
@@ -32,7 +36,7 @@ def stage_nomemo_a(ctx, pkg):
   c = bake.Cmd(ctx)
   c.cwd = bld
   c.tag = pkg
-  if ball.endswith('.tar.gz'):
+  if ball.endswith('.tar.gz') or ball.endswith('.tgz'):
     c.lit('tar', 'xzf').inf(ball)
   elif ball.endswith('.tar.bz2'):
     c.lit('tar', 'xjf').inf(ball)

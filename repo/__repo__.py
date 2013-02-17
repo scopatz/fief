@@ -1,6 +1,8 @@
 packages = {
   'sys_cc': (None, 'sys_cc.py'),
   'sys_py': (None, 'sys_py.py'),
+  'sys_fortran': (None, 'sys_fortran.py'),
+  'lapack': ('http://www.netlib.org/lapack/lapack-3.4.2.tgz', 'lapack.py'), 
   'atlas': ('http://sourceforge.net/projects/math-atlas/files/Stable/3.10.1/atlas3.10.1.tar.bz2/download', 'atlas.py'),
   'cython': ('http://cython.org/release/Cython-0.18.tar.gz', 'cython.py'),
   'hdf5': ('http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2', 'hdf5.py'),
