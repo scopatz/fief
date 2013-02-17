@@ -4,7 +4,7 @@ from fief import repo
 from fief import conf
 from fief.repo import ifc, async, Cmd
 
-interfaces = {'hdf5': ifc(requires='zlib'), 
+interfaces = {'hdf5': ifc(requires=('zlib', 'cmake')), 
               'hdf5-cpp': ifc(subsumes='hdf5'), 
               'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2'),
               }
