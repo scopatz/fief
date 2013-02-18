@@ -120,14 +120,17 @@ class Repo(object):
       execfile(os.path.join('repo', py), ns, ns)
       yield async.Result(pack_ifx(ns['interfaces']))
     
+    pkgs = set()
     pkg_src = {}
     pkg_py = {}
     pkg_ifx = {}
     pkg_ifc_reqs = {} # {(pkg,ifc):set(ifc)}
+    ifcs = set()
     ifc_imps = {}
     ifc_subs = {}
     
     for pkg,(src,py) in pkg_defs.iteritems():
+      pkgs.add(pkg)
       pkg_src[pkg] = src
       pkg_py[pkg] = py
       ifx = yield async.WaitFor(oven.memo_a(packed_ifx_a, {'py':py}))
@@ -135,19 +138,28 @@ class Repo(object):
       pkg_ifx[pkg] = ifx
       
       for ifc in ifx:
+        ifcs.add(ifc)
         ifc_imps[ifc] = ifc_imps.get(ifc, set())
         ifc_imps[ifc].add(pkg)
         ifc_subs[ifc] = ifc_subs.get(ifc, set())
         ifc_subs[ifc].union_update(ifx[ifc].subsumes)
         pkg_ifc_reqs[pkg,ifc] = ifx[ifc].requires
     
+    me._pkgs = frozenset(pkgs)
     me._pkg_src = pkg_src
     me._pkg_py = pkg_py
     me._pkg_ifx = pkg_ifx
     me._pkg_stuff = {}
     me._pkg_ifc_reqs = pkg_ifc_reqs
+    me._ifcs = frozenset(ifcs)
     me._ifc_imps = dict((ifc,frozenset(imps)) for ifc,imps in ifc_imps.iteritems())
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
+  
+  def packages(me):
+    return me._pkgs
+    
+  def interfaces(me):
+    return me._ifcs
   
   def pkg_source(me, pkg):
     return me._pkg_src[pkg]
