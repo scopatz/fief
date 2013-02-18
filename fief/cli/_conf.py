@@ -10,6 +10,7 @@ class Conf(object):
     path = os.getcwd()
     drive, _ = os.path.split(path)
     root = drive + os.path.sep
+    me.oven = 'oven'
     me.interfaces = set()
     me.preferences = {}
     me.options = lambda x,y: (None, False)
@@ -19,6 +20,8 @@ class Conf(object):
         if os.path.isfile(p):
           config = {}
           execfile(p, config, config)
+          if 'oven' in config:
+            me.oven = config['oven']
           if 'interfaces' in config:
             me.interfaces = set(config['interfaces'])
           if 'preferences' in config:
