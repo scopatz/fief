@@ -2,7 +2,7 @@ import os
 import sys
 import urllib
 import time
-from haslib import md5
+from hashlib import md5
 from base64 import urlsafe_b64encode
 
 import async
@@ -13,7 +13,7 @@ resources = {}
 
 def _url2local(rsrc):
     name = os.path.split(rsrc)[-1]
-    h = urlsafe_b64encode(md5().update(rsrc).digest())
+    h = urlsafe_b64encode(md5(rsrc).digest())
     path = os.path.abspath(os.path.join('oven', 'i', '{0:x}-{1}'.format(h, name)))
     return path
 
