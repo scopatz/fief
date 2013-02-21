@@ -9,52 +9,20 @@ from base64 import urlsafe_b64encode
 
 import async
 
-PROTOCOLS = set(['http', 'https', 'git', 'hg', 'ssh', 'file', 'dummy'])
+def canonify_resource(rsrc):
+  if isinstance(rsrc, basestring):
+    if re.match('https?://', rsrc) is not None:
+      return [('url','tarball',rsrc)]
+    else:
+      return [('tarball', rsrc)]
+  elif isinstance(rsrc, tuple) and len(rsrc) > 0 and isinstance(rsrc[0], basestring):
+    return [rsrc]
+  else:
+    xs = []
+    for x in rsrc:
+      xs += canonify_resource(x)
+    return xs
 
-_actions = {}
-
-def _act_url_a(me, url):
-  tar = yield async.WaitFor(me._download_a(rest))
-  d, cleanup = yield async.WaitFor(_actions['file'](f))
-  return d, cleanup
-_acions['url'] = _act_url_a
-
-def _act_tar_a(me, tar):
-  m = re.match('(.*)\\.(tgz|tar\\.(gz|bz2))', tar)
-  assert m is not None
-  
-  if tar.endswith('.
-def stage_nomemo_a(ctx, pkg):
-  """Returns a tuple (path, cleanup)"""
-  repo = 'repo'
-  p = packages[pkg]
-  ball = p.source
-  if ball.endswith('.tgz'):
-    ndots = 1
-  elif ball.endswith('.tar.gz') or ball.endswith('.tar.bz2'):
-    ndots = 2
-  name = os.path.split(ball)[-1].rsplit('.', ndots)[0]
-  bld = tempfile.mkdtemp()
-  if os.name == 'nt':
-    ball = ball.split(':', 1)[-1]
-
-  c = bake.Cmd(ctx)
-  c.cwd = bld
-  c.tag = pkg
-  if ball.endswith('.tar.gz') or ball.endswith('.tgz'):
-    c.lit('tar', 'xzf').inf(ball)
-  elif ball.endswith('.tar.bz2'):
-    c.lit('tar', 'xjf').inf(ball)
-  yield async.WaitFor(c.exec_a())
-
-  bld2 = os.path.join(bld, name)
-  if not os.path.exists(bld2):
-    unzipped = os.listdir(bld)
-    if 1 == len(unzipped):
-      bld2 = os.path.join(bld, unzipped[0]) 
-
-  cleanup = lambda: shutil.rmtree(bld)
-  yield async.Result((bld2, cleanup))  
 class Fetch(object):
   def __init__(me, stash_path, find_file):
     me._stash = stash_path
@@ -63,60 +31,86 @@ class Fetch(object):
     me._live = 0
     me._bar = async.Barrier()
   
-  def procure(me, rsrc):
+  def procure(me, ctx, rsrc):
     """returns (path,cleanup)"""
-    pass
-  
-  def _canonify(me, rsrc):
-    pass
+    rsrc = canonify_resource(rsrc)
+    for x in rsrc:
+      got = _actions[x[0]](me, ctx, *x[1:])
+      if got is None:
   
   def _download_a(me, url):
     def localize(url):
       name = os.path.split(url)[-1]
       h = urlsafe_b64encode(md5(url).digest())
       return os.path.join(me._stash, name + '-' + h)
+    locf = localize(url)
     
-    loc = localize(url)
-    
-    if not os.path.exists(loc):
+    if not os.path.exists(locf):
       def task():
-        sys.stderr.write('downloading {0} ...\n'.format(url))
-        urllib.urlretrieve(url, loc)
+        try:
+          sys.stderr.write('downloading {0} ...\n'.format(url))
+          urllib.urlretrieve(url, locf)
+          got = loc
+        except urllib.ContentTooShort, e:
+          got = None
         sys.stderr.write('finished    {0}\n'.format(url))
+        return got
       
       while me._live == me._maxlive:
         yield async.WaitFor(me._bar)
       me._live += 1
-      yield async.WaitFor(task)
+      got = yield async.WaitFor(task)
       me._live -= 1
       me._bar.fire_one()
     
-    yield async.Result(loc)
+    yield async.Result(got)
+
+
+_procure = {} # procuring returns either (path,cleanup) or None
+
+def _procure_url_a(me, ctx, kind, url):
+  f = yield async.WaitFor(me._download_a(url))
+  if f is None:
+    yield async.Result(None)
+  got = yield async.WaitFor(_procure[kind](ctx, f))
+  yield async.Result(got)
+
+_procure['url'] = _procure_url_a
+
+def _procure_tarball_a(me, ctx, path):
+  if not os.path.exists(path):
+    return None
   
-def _canonical_resource(rsrc):
-  if isinstance(rsrc, basestring):
-    if rsrc.startswith('http://'):
-      return [('http', rsrc, _url2local(rsrc))]
-    elif rsrc.startswith('https://'):
-      return [('https', rsrc, _url2local(rsrc))]
-    elif rsrc.startswith('git://') or rsrc.startswith('git@') or \
-       rsrc.endswith('.git'):
-      return [('git', rsrc, os.path.abspath(rsrc))]
-    elif rsrc == 'dummy':
-      return [('dummy', None, None)]
-    else:
-      return [('file', rsrc, os.path.abspath(os.path.join('repo', rsrc)))]
-      #msg = "protocol not inferred for resource {0!r}"
-      #raise ValueError(msg.format(rsrc))
-  elif rsrc is None:
-    return [('dummy', None, None)]
-  elif 3 == len(rsrc) and rsrc[0] in PROTOCOLS:
-    return [rsrc]
+  exts = {
+    '.tgz': ('tar', 'xzf'),
+    '.tar.gz': ('tar', 'xzf'),
+    '.tar.gzip': ('tar', 'xzf'),
+    '.tar.bz2': ('tar', 'xjf')
+  }
+  rex = '.*(' + '|'.join(e.replace('.','\\.') for e in exts.keys()) + ')$'
+  lits = exts[re.match(rex, path).group(1)]
+  
+  tmpd = tempfile.mkdtemp()
+  c = bake.Cmd(ctx)
+  c.cwd = tmpd
+  c.tag = ctx['pkg']
+  if os.name == 'nt':
+    path = path.split(':',1)[1]
+  c.lit(lits).inf(path)
+  yield async.WaitFor(c.exec_a())
+  
+  ls = os.listdir(tmpd)
+  if len(ls) == 1:
+    top = os.path.join(tmpd, ls[0])
+    if not os.path.isdir(top):
+      top = tmpd
   else:
-    rtn = []
-    for r in rsrc:
-      rtn += _canonical_resource(r) 
-    return rtn
+    top = tmpd
+  
+  cleanup = lambda: shutil.rmtree(tmpd)
+  yield async.Result((top, cleanup))
+
+_procure['tarball'] = _procure_tarball_a
 
 def _init(pkgs):
   for pkg, (rsrc, _) in pkgs.items():
