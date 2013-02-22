@@ -6,9 +6,21 @@ import subprocess
 
 import async
 import bake
-from repo import ifc
+import repository
+ifc = respository.ifc
+from repository import ifc
 
-def deliver_a(oven, conf, repo, ifcs):
+# want this?
+class Fief(object):
+  def __init__(me, conf_path):
+    me.repo = None
+    me.procurer = None
+    me.oven = None
+
+def deliver_a(me, fief, ifcs):
+  oven = fief.oven
+  # yack
+  
   def less(ifc, a, b):
     return a == conf.preferences.get(ifc)
   
@@ -60,7 +72,25 @@ def deliver_a(oven, conf, repo, ifcs):
   
   soln = least[0]
   
-  for pkg in set(soln.values()):
+  pkg_deps = {} # package to package dependencies
+  for ifc,pkg in soln.iteritems():
+    pkg_deps[pkg] = pkg_deps.get(pkg, set())
+    pkg_deps[pkg].union_update(soln[req] for req in repo.pkg_ifc_reqs(pkg, ifc))
+  
+  pkg_list = [] # packages topsorted by dependencies
+  def topsort(pkgs):
+    for pkg in pkgs:
+      if pkg not in pkg_list:
+        topsort(pkg_deps.get(pkg, ()))
+      if pkg not in pkg_list:
+        pkg_list.append(pkg)
+  topsort(pkg_deps)
+  
+  pro = procurer.Procurer(
+  for pkg in pkg_list:
+    src = repo.pkg_source(pkg)
+    
+  for pkg in pkg_list:
     def lam(pkg):
       def args(x):
         if type(x) is tuple and len(x)==2 and x[0]=='interface':
@@ -75,7 +105,7 @@ def deliver_a(oven, conf, repo, ifcs):
       def build_a(ctx):
         yield async.WaitFor(bldr(ctx))
       yield async.Task(pkg, oven.memo_a(build_a, args))
-      
+    
 
 def deliver_a(oven, active_ifcs, lazy=False):
   reqs = set()
