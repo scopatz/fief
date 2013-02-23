@@ -4,10 +4,8 @@ import shutil
 import tempfile
 import itertools
 
-import conf
 import bake
 import async
-import fetch
 
 #ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
 ensure_frozenset = lambda x: set(x if hasattr(x, '__iter__') else (x,))

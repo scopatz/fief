@@ -8,18 +8,10 @@ import async
 import bake
 import repository
 ifc = respository.ifc
-from repository import ifc
-
-# want this?
-class Fief(object):
-  def __init__(me, conf_path):
-    me.repo = None
-    me.procurer = None
-    me.oven = None
 
 def deliver_a(me, fief, ifcs):
   oven = fief.oven
-  # yack
+  repo = yield async.WaitFor(fief.repo_a())
   
   def less(ifc, a, b):
     return a == conf.preferences.get(ifc)
@@ -86,7 +78,6 @@ def deliver_a(me, fief, ifcs):
         pkg_list.append(pkg)
   topsort(pkg_deps)
   
-  pro = procurer.Procurer(
   for pkg in pkg_list:
     src = repo.pkg_source(pkg)
     
