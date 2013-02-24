@@ -1,10 +1,12 @@
-.. fief documentation master file, created by
-   sphinx-quickstart on Sun Jan 27 00:12:33 2013.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. raw:: html
 
-Welcome to fief's documentation!
-================================
+    <link href="_static/unicodetiles.css" rel="stylesheet" type="text/css" />
+    <script src="_static/unicodetiles.min.js"></script>
+    <script src="_static/fief-dungeon.js"></script>
+    <div style="text-align:center;">
+        <div id="game"><h1>welcome to the fief docs</h1></div>
+    </div>
+    <script type="text/javascript">initFiefDungeon();</script>
 
 Contents:
 
