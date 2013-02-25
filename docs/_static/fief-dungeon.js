@@ -94,6 +94,8 @@ function onKeyDown(k) {
 	tick();
 }
 
+// Maze functions modified from the ones at 
+// http://rosettacode.org/wiki/Maze_generation#JavaScript
 function mazegen(x,y) {
     var n=x*y-1;
     if (n<0) {alert("illegal maze dimensions");return;}
