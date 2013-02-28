@@ -168,13 +168,10 @@ function mazedisplay(m) {
         if (0 == j) line[1]= line[2]= line[3]= '.';
         if (m.x*2-1 == j) line[4*m.y]= '.';
         var l = line.join('');
-        console.log(j);
         if (fmylbound <= j && j < fmyubound){
-            console.log(l.length);
             var ll = l.slice(0, fmxlbound);
             var lu = l.slice(fmxubound, 4*m.x+1);
             l = ll + fiefmap[j-fmylbound] + lu;
-            console.log(l.length);
         }
         text.push(l);
     }
