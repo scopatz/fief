@@ -37,5 +37,3 @@ class EnvDeltaScalarDefine(EnvDelta):
   def __init__(me, var, val):
     me._set_adds = {}
     me._sca_defs = {var: val}
-    
-    
