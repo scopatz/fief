@@ -26,18 +26,26 @@ def procure_a(fief, ctx, src):
       yield async.Result(got)
   raise Exception("Failed to acquire source %r." % src)
 
+_prime_source {}
 _procure_source = {} # procuring returns either (path,cleanup) or None
 
-def _procure_url_a(fief, ctx, subkind, url):
-  f = yield async.WaitFor(fief.downloader.download_a(url))
-  if f is None:
+def _prime_url_a(fief, subkind, url):
+  f = yield async.WaitFor(fief.download_a(url))
+  yield async.Result(f)
+
+_prime_source['url'] = _prime_url_a
+
+def _procure_url_a(fief, ctx, primed, subkind, url):
+  if primed is None:
     yield async.Result(None)
-  got = yield async.WaitFor(_procure[subkind](ctx, f))
+  got = yield async.WaitFor(_procure[subkind](ctx, primed))
   yield async.Result(got)
 
 _procure_source['url'] = _procure_url_a
 
-def _procure_tarball_a(fief, ctx, path):
+_prime_source['tarball'] = lambda fief,path: None
+
+def _procure_tarball_a(fief, ctx, primed, path):
   if not os.path.exists(path):
     return None
   

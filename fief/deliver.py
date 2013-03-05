@@ -6,6 +6,8 @@ import subprocess
 
 import async
 import bake
+import fief
+import procure
 import repository
 ifc = respository.ifc
 
@@ -64,7 +66,7 @@ def deliver_a(me, fief, ifcs):
   
   soln = least[0]
   
-  pkg_deps = {} # package to package dependencies
+  pkg_deps = {} # package to package dependencies, not transitively closed
   for ifc,pkg in soln.iteritems():
     pkg_deps[pkg] = pkg_deps.get(pkg, set())
     pkg_deps[pkg].union_update(soln[req] for req in repo.pkg_ifc_reqs(pkg, ifc))
@@ -78,9 +80,10 @@ def deliver_a(me, fief, ifcs):
         pkg_list.append(pkg)
   topsort(pkg_deps)
   
+  # begin procuring
   for pkg in pkg_list:
-    src = repo.pkg_source(pkg)
-    
+    src = repo.package(pkg).source()
+    procure.procure_a(fief, # fix priming!!
   for pkg in pkg_list:
     def lam(pkg):
       def args(x):

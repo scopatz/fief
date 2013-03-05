@@ -1,8 +1,6 @@
 import os
 import sys
 import urllib
-import time
-import re
 from hashlib import md5
 from base64 import urlsafe_b64encode
 
