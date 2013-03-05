@@ -1,5 +1,7 @@
-_undo_key = 'FIEF_UNDO'
+import os
+from copy import deepcopy
 
+_undo_key = 'FIEF_UNDO'
 
 class EnvDelta(object):
   def __init__(me, sets=None, scalars=None):
@@ -8,7 +10,7 @@ class EnvDelta(object):
 
   @classmethod
   def fromiter(cls, var, vals):
-    return cls(sets={var: set(vals)})
+    return cls(sets={var: set(vals if hasattr(vals, '__iter__') else (vals,))})
 
   @classmethod
   def fromscalar(cls, var, val):
@@ -36,9 +38,22 @@ class EnvDelta(object):
     
     for k in that._sca_defs:
       me._sca_defs[k] = that._sca_defs[k]
-  
+
   def apply(me, env):
-    pass
+    newenv = deepcopy(env)
+    undo = eval(env.get(_undo_key, 'None').strip('"')) or EnvDelta()
+    for key, val in me._set_adds.items():
+      undoval = undo._set_adds.get(key, ())
+      origval = env.get(key, None)
+      origval = [] if origval is None else origval.split(os.pathsep)
+      origset = set(origval)
+      newval = [v for v in val if v not in origset]
+      newval += [v for v in origval if (v in undoval and v in val) or
+                                       (v not in val)]
+      newenv[key] = os.pathsep.join(newval)
+    newenv.update(me._sca_defs)
+    newenv[_undo_key] = repr(me)
+    return newenv
   
   def unapply(me, env):
     pass
