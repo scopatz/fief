@@ -20,47 +20,73 @@ def run_async(f):
     async.run(f())
   return test_runner
 
+# destroy order! chaos reigns!
+sditems = lambda x: set(frozenset(d.iteritems()) for d in x)
+
 def check_case(pkgs, ifcs, exp):
   def a():
     repo = yield async.WaitFor(Repo.new_a(None, pkgs))
-    obs = [s for s in solve(repo, ifcs)][0]
-    assert_equal(obs, exp)
+    obs = sditems(solve(repo, ifcs))
+    assert_equal(obs, sditems(exp))
   async.run(a())
 
 cases = ( # pkgs, exp
 # 1 pkg, no deps
-({'zlib': MockPackage({'zlib': ifc()})}, ['zlib'], {'zlib': 'zlib'}),
+({'zlib': MockPackage({'zlib': ifc()})}, ['zlib'], [{'zlib': 'zlib'}]),
 # 2 pkgs, 1 dep
-({'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
-  'sys_cc':  MockPackage({'cc': ifc()})}, 
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}),}, 
  ['zlib'],
- {'zlib': 'zlib', 'cc': 'sys_cc'}),
+ [{'zlib': 'zlib', 'cc': 'sys_cc'}]),
 # 3 pkgs, 2 deps, realize middle
-({'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+({'sys_cc':  MockPackage({'cc': ifc()}), 
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
   'hdf5':  MockPackage({'hdf5': ifc(requires='zlib')}), 
-  'sys_cc':  MockPackage({'cc': ifc()})}, 
+  },
  ['zlib'],
- {'zlib': 'zlib', 'cc': 'sys_cc'}),
+ [{'zlib': 'zlib', 'cc': 'sys_cc'}]),
 # 3 pkgs, 2 deps, realize all
-({'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
   'hdf5':  MockPackage({'hdf5': ifc(requires='zlib')}), 
-  'sys_cc':  MockPackage({'cc': ifc()})}, 
+  }, 
  ['hdf5'],
- {'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5'}),
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5'}]),
 # 3 pkgs, 2 deps, realize all, skip subsumption
-({'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
-  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'), 
-                        'hdf5-parallel': ifc(subsumes='hdf5')}), 
-  'sys_cc':  MockPackage({'cc': ifc()})}, 
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib')}), 
+  }, 
  ['hdf5'],
- {'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5'}),
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5'}]),
 # 3 pkgs, 2 deps, realize all, use subsumption
-({'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
-  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'), 
-                        'hdf5-parallel': ifc(subsumes='hdf5')}), 
-  'sys_cc':  MockPackage({'cc': ifc()})}, 
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+   'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'),
+                        'hdf5-parallel': ifc(subsumes='hdf5')}),
+  },
  ['hdf5-parallel'],
- {'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5'}),
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5'}]),
+# 4 pkgs, 3 deps, realize all, use subsumption
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+  'mpich': MockPackage({'mpi2': ifc(requires='cc')}),
+  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'), 
+                        'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2')}), 
+  }, 
+ ['hdf5-parallel'],
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
+   'mpi2': 'mpich'}]),
+# 4 pkgs, 3 deps, realize all, multiple interfaces in subsumption
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+  'mpich': MockPackage({'mpi2': ifc(requires='cc'), 'mpi3': ifc(subsumes='mpi2')}),
+  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'), 
+                        'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2')}), 
+  }, 
+ ['hdf5-parallel'],
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
+   'mpi2': 'mpich'}]),
 )
 
 def test_cases():
