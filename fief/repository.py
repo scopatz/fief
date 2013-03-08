@@ -35,7 +35,7 @@ class Package(object):
     raise Exception('Not implemented.')
 
 class PackageScript(Package):
-  def __init__(me source, py_file):
+  def __init__(me, source, py_file):
     me._src = source
     me._py = py_file
     me._ifx = None
