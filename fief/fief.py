@@ -4,8 +4,8 @@ import shutil
 
 import async
 import bake
-import downloader
 import respository
+import procurer
 
 def default_conf_path():
   path = os.getcwd()
@@ -37,12 +37,8 @@ class Fief(object):
     me._opts = conf.get('options', lambda x,y: (None, False))
     me._pkgs = conf.get('packages', {})
     
-    me._down = downloader.Downloader(os.path.join(me._path_stash, 'down'))
-
+    me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
     me.oven = bake.Oven(bake.MemoHost(bake.FileHost_a), os.path.join(me._path_stash, 'oven'))
     me.repo = yield async.WaitFor(repository.Repo.new_a(me.oven, me._pkgs))
     
     yield async.Result(me)
-  
-  def download_a(me, url):
-    return me._down.download_a(url)
