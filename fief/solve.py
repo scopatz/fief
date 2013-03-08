@@ -26,14 +26,16 @@ def solve(repo, ifcs):
     loop.update(repo.pkg_ifc_reqs(pkg, ifc))
     
     while len(loop) > 0:
-      more = []
+      more = set()
       for i in loop:
         if i not in world:
           world.add(i)
           world_adds.append(i)
           for s in repo.ifc_subs(i):
             if s not in world:
-              more.append(s)
+              more.add(s)
+              if part[i] == part[ifc]:
+                more.update(repo.pkg_ifc_reqs(pkg, s))
             part.merge(i, s)
       loop = more
     
