@@ -3,38 +3,51 @@ import multiprocessing
 import types
 from collections import deque
 import sys
-import bake
 
 max_threads = multiprocessing.cpu_count()
 
-class Yield(object):
-  def __init__(me, tasks, waitp):
-    # tasks: [(rcvr,key,work,aff)]
-    object.__init__(me)
-    me.tasks = tasks
-    me.waitp = waitp
+class Pinned(object):
+  def __init__(me, lam, thd):
+    me._lam = lam
+    me._thd = thd
+  def __call__(me, *a, **kw):
+    return me._lam(*a, **kw)
 
-def Task(key, work, aff=None):
-  return Yield((((lambda it:it), key, work, aff),), None)
+def pinned(thd):
+  return lambda lam: Pinned(lam, thd)
 
-WaitAny = Yield((), lambda key:True)
+class Future(object):
+  def __init__(me, task):
+    me._task = task
+    me._its = set() # set of ItStat
+    me._resulter = None # lambda that returns value or throws
+  def done(me):
+    return me._resulter is not None
+  def result(me):
+    assert me._resulter is not None
+    return me._resulter()
 
-def WaitSome(key_pred):
-  return Yield((), key_pred)
+class WaitAny(object):
+  def __init__(me, futs):
+    assert len(futs) > 0
+    me._futs = futs
 
-class _KeyStripper(object):
+class Sync(object):
+  def __init__(me, task):
+    me._task = task
+
+class Result(object):
+  def __init__(me, val):
+    me._val = val
+
+class _ItStat(object):
   def __init__(me, it):
-    me.it = it
-  def send(me, msg):
-    key, val = msg
-    return me.it.send(val)
-  def throw(me, c, ex, tb):
-    return me.it.throw(c, ex, tb)
-
-def WaitFor(work, aff=None):
-  task = (_KeyStripper, WaitFor, work, aff)
-  waitp = lambda key: key is WaitFor
-  return Yield((task,), waitp)
+    me._it = it
+    me._waits = set() # set of futures
+    
+class _Engine(object):
+  def __init__(me):
+    me.its = {}
 
 class Barrier(object):
   class _Box(object):
@@ -90,12 +103,6 @@ class Barrier(object):
     for st,rcvr,key,box in me._sleeps:
       me._send(st, me._wraprcvr(rcvr, box), key, None)
     del me._sleeps[:]
-
-class Result(object):
-  __slots__ = ("val",)
-  def __init__(me, val):
-    object.__init__(me)
-    me.val = val
 
 class Lock(object):
   def __init__(me):
