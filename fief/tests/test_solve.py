@@ -77,7 +77,7 @@ cases = ( # pkgs, exp
  ['hdf5-parallel'],
  [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
    'mpi2': 'mpich'}]),
-# 4 pkgs, 3 deps, realize all, multiple interfaces in subsumption
+# 4 pkgs, 3 deps, realize all, multiple interfaces in subsumption, use lowest
 ({'sys_cc':  MockPackage({'cc': ifc()}),
   'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
   'mpich': MockPackage({'mpi2': ifc(requires='cc'), 'mpi3': ifc(subsumes='mpi2')}),
@@ -87,6 +87,41 @@ cases = ( # pkgs, exp
  ['hdf5-parallel'],
  [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
    'mpi2': 'mpich'}]),
+# 4 pkgs, 3 deps, realize all, multiple interfaces in subsumption, use highest
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+  'mpich': MockPackage({'mpi2': ifc(requires='cc'), 'mpi3': ifc(subsumes='mpi2')}),
+  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'), 
+                        'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi3')}), 
+  }, 
+ ['hdf5-parallel'],
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
+   'mpi3': 'mpich', 'mpi2': 'mpich'}]),
+# 4 pkgs, 3 deps, realize all, multiple interfaces in subsumption, ambiguous interface
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+  'mpich': MockPackage({'mpi': ifc(requires='cc'), 
+                        'mpi2': ifc(subsumes='mpi'),
+                        'mpi3': ifc(subsumes='mpi')}),
+  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'), 
+                        'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi')}), 
+  }, 
+ ['hdf5-parallel'],
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
+   'mpi': 'mpich'},]),
+# 4 pkgs, 3 deps, realize all, multiple interfaces in subsumption, ambiguous interface
+({'sys_cc':  MockPackage({'cc': ifc()}),
+  'zlib': MockPackage({'zlib': ifc(requires='cc')}), 
+  'mpich': MockPackage({'mpi': ifc(requires='cc'), 
+                        'mpi2': ifc(subsumes='mpi'),
+                        'mpi3': ifc(subsumes='mpi')}),
+  'openmpi': MockPackage({'mpi2': ifc()}),
+  'hdf5':  MockPackage({'hdf5': ifc(requires='zlib'), 
+                        'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi')}), 
+  }, 
+ ['hdf5-parallel'],
+ [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
+   'mpi': 'mpich'}, None]),
 )
 
 def test_cases():
