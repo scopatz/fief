@@ -7,6 +7,7 @@ import sys
 max_threads = multiprocessing.cpu_count()
 
 class Pinned(object):
+  """a callable that is pinned to run on a named thread"""
   def __init__(me, lam, thd):
     me._lam = lam
     me._thd = thd
@@ -19,10 +20,12 @@ def pinned(thd):
 class Future(object):
   def __init__(me, task):
     me._task = task
-    me._its = set() # set of ItStat
+    me._sts = set() # set of ItStat waiting on this future
     me._resulter = None # lambda that returns value or throws
+  
   def done(me):
     return me._resulter is not None
+  
   def result(me):
     assert me._resulter is not None
     return me._resulter()
@@ -32,22 +35,49 @@ class WaitAny(object):
     assert len(futs) > 0
     me._futs = futs
 
-class Sync(object):
-  def __init__(me, task):
-    me._task = task
-
 class Result(object):
   def __init__(me, val):
     me._val = val
 
 class _ItStat(object):
   def __init__(me, it):
-    me._it = it
-    me._waits = set() # set of futures
-    
-class _Engine(object):
+    me.it = it
+    me.waits = set() # set of futures
+
+class _Scheduler(object):
   def __init__(me):
-    me.its = {}
+    me._sts = set() # ItStat's
+    me._evts = deque()
+    me._lock = threading.Lock()
+    me._cvdone = threading.Condition(lock)
+    me._thd_cvs = {} # {thd-name: threading.Condition}
+    me._thd_jobs = {} # {thd-name: deque()}
+  
+  def post(st, valer):
+    def act(st, valer):
+      try:
+        val = valer()
+        return st.it.send(val)
+      except Exception, e:
+        return st.it.throw(type(e), e, sys.exc_traceback)
+      return st.it.send(val)
+    me._evts.append((act, st, val))
+  
+  def progress():
+    while len(me._evts) > 0:
+      evt = me._evts.popleft()
+      st = evt[1]
+      try:
+        got = evt[0](*evt[1:])
+        resulter = (lambda got: lambda: got)(got)
+      except Exception, e:
+        resulter = 
+      
+_sched = _Scheduler()
+
+def top(a):
+  f = Future(a)
+  _sched._
 
 class Barrier(object):
   class _Box(object):
