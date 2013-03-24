@@ -53,15 +53,15 @@ class _Scheduler(object):
     me._thd_cvs = {} # {thd-name: threading.Condition}
     me._thd_jobs = {} # {thd-name: deque()}
   
-  def post(st, valer):
-    def act(st, valer):
-      try:
-        val = valer()
-        return st.it.send(val)
-      except Exception, e:
-        return st.it.throw(type(e), e, sys.exc_traceback)
+  def _act(st, valer):
+    try:
+      val = valer()
       return st.it.send(val)
-    me._evts.append((act, st, val))
+    except Exception, e:
+      return st.it.throw(type(e), e, sys.exc_traceback)
+  
+  def post(me, st, valer):
+    me._evts.append((me._act, st, valer))
   
   def progress():
     while len(me._evts) > 0:
