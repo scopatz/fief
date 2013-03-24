@@ -35,44 +35,88 @@ class WaitAny(object):
     assert len(futs) > 0
     me._futs = futs
 
-class Result(object):
+class _ItReturn(object):
+  pass
+
+class Result(_ItReturn):
   def __init__(me, val):
     me._val = val
 
+class Raise(_ItReturn):
+  def __init__(me, ex, tb):
+    me._ex = ex
+    me._tb = tb
+
 class _ItStat(object):
-  def __init__(me, it):
+  def __init__(me, parfut, it):
+    assert isinstance(parfut, Future)
+    me.parfut = parfut
     me.it = it
-    me.waits = set() # set of futures
+    me.wait_futs = set() # set of futures
 
 class _Scheduler(object):
   def __init__(me):
-    me._sts = set() # ItStat's
-    me._evts = deque()
-    me._lock = threading.Lock()
-    me._cvdone = threading.Condition(lock)
-    me._thd_cvs = {} # {thd-name: threading.Condition}
-    me._thd_jobs = {} # {thd-name: deque()}
+    me.futs_live = 0
+    me.actns = deque()
+    me.thdjobs = {}
+def run(a):
+  lock = threading.Lock()
+  cvdone = threading.Condition(lock)
+  thdcvs = {}
+  thdjobs = {}
+  acts = deque()
+  sts = set()
+  class closure:
+    futs_live = 1
+    thds = 0
+    unks = 0
+    unks_idle = 0
   
-  def _act(st, valer):
-    try:
-      val = valer()
-      return st.it.send(val)
-    except Exception, e:
-      return st.it.throw(type(e), e, sys.exc_traceback)
+  def act_send(st, fut, val):
+    return st.it.send((fut,val))
+  def act_throw(st, fut, e, tb):
+    return st.it.throw(type(e), e, tb)
+  def action(st, ret):
+    assert isinstance(st, _ItStat)
+    assert isinstance(ret, _ItReturn)
+    if isinstance(ret, Result):
+      return (act_send, st, ret._val)
+    else:
+      assert isinstance(ret, Raise)
+      return (act_throw, st, ret._ex, ret._tb)
   
-  def post(me, st, valer):
-    me._evts.append((me._act, st, valer))
+  def finish(me, fut, ret):
+    assert isinstance(fut, Future)
+    assert isinstance(ret, _ItReturn)
+    for st in fut.wait_sts:
+      acts.append(action(st, ret))
+    fut.wait_sts.clear()
   
   def progress():
-    while len(me._evts) > 0:
-      evt = me._evts.popleft()
-      st = evt[1]
+    while len(acts) > 0:
+      act = acts.popleft()
+      st = act[1]
       try:
-        got = evt[0](*evt[1:])
-        resulter = (lambda got: lambda: got)(got)
+        got = act[0](*act[1:])
+      except StopIteration:
+        got = Result(None)
       except Exception, e:
-        resulter = 
+        got = Raise(e, sys.exc_traceback)
       
+      if isinstance(got, _ItReturn):
+        if st.parfut is not None:
+          me.finish(st.parfut, got)
+        else:
+          closure.ret = got
+        closure.futs_live -= 1
+      else:
+        assert isinstance(got, WaitAny)
+        assert len(st.wait_futs) == 0
+        for fut in got._futs:
+          if fut.done():
+            acts.appendleft(_action(
+          st.wait_futs.add(fut)
+          fut.wait_sts.add(st)
 _sched = _Scheduler()
 
 def top(a):
