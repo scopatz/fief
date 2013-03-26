@@ -4,48 +4,79 @@ import types
 from collections import deque
 import sys
 
-max_threads = multiprocessing.cpu_count()
+default_pool_size = multiprocessing.cpu_count()
+
+class Pool(object):
+  def __init__(me, name, size=default_pool_size):
+    me.name = name
+    me.size = size
+
+def pool_name(pool):
+  if pool is None:
+    return None
+  else:
+    return pool.name
+
+def pool_size(pool):
+  if pool is None:
+    return default_pool_size
+  else:
+    return pool.size
 
 class Pinned(object):
   """a callable that is pinned to run on a named thread"""
-  def __init__(me, lam, thd):
+  def __init__(me, lam, pool):
     me._lam = lam
-    me._thd = thd
+    me._pool = pool
   def __call__(me, *a, **kw):
     return me._lam(*a, **kw)
 
-def pinned(thd):
-  return lambda lam: Pinned(lam, thd)
+def pinned(pool):
+  return lambda lam: Pinned(lam, pool)
 
-class Future(object):
+def pinned_pool(lam):
+  if type(lam) is Pinned:
+    return lam._pool
+  else:
+    return None
+
+class _Return(object):
+  pass
+
+class Result(_Return):
+  def __init__(me, val):
+    me._val = val
+  def __call__(me):
+    return me._val
+
+class Raise(_Return):
+  def __init__(me, ex, tb):
+    me._ex = ex
+    me._tb = tb
+  def __call__(me):
+    raise type(me._ex), me._ex, me._tb
+
+class _Yield(object):
+  pass
+
+class Begin(_Yield):
   def __init__(me, task):
     me._task = task
-    me._sts = set() # set of ItStat waiting on this future
-    me._resulter = None # lambda that returns value or throws
-  
-  def done(me):
-    return me._resulter is not None
-  
-  def result(me):
-    assert me._resulter is not None
-    return me._resulter()
 
-class WaitAny(object):
+class WaitAny(_Yield):
   def __init__(me, futs):
     assert len(futs) > 0
     me._futs = futs
 
-class _ItReturn(object):
-  pass
-
-class Result(_ItReturn):
-  def __init__(me, val):
-    me._val = val
-
-class Raise(_ItReturn):
-  def __init__(me, ex, tb):
-    me._ex = ex
-    me._tb = tb
+class _Future(object):
+  def __init__(me):
+    me._wait_sts = set() # set of ItStat waiting on this future
+    me._ret = None # _Return
+  def done(me):
+    return me._ret is not None
+  def result(me):
+    assert me._ret is not None
+    return me._ret()
 
 class _ItStat(object):
   def __init__(me, parfut, it):
@@ -54,74 +85,145 @@ class _ItStat(object):
     me.it = it
     me.wait_futs = set() # set of futures
 
-class _Scheduler(object):
-  def __init__(me):
-    me.futs_live = 0
-    me.actns = deque()
-    me.thdjobs = {}
 def run(a):
   lock = threading.Lock()
-  cvdone = threading.Condition(lock)
-  thdcvs = {}
-  thdjobs = {}
-  acts = deque()
-  sts = set()
+  cv_done = threading.Condition(lock)
+  pool_num = {} # {pool.name: int} - number of spawned threads in pool
+  pool_idle = {} # {pool.name: int} - number of idle threads in pool
+  pool_cv = {} # {pool.name: Condition}
+  pool_jobs = {} # {pool.name: deque(callable)}
+  wake_sts = deque() # deque(_ItStat): queue of iters to wake, no duplicates
+  wake_meth = {} # {_ItStat: it->()}: set of iters to wake
   class closure:
-    futs_live = 1
-    thds = 0
-    unks = 0
-    unks_idle = 0
+    quitting = False
   
-  def act_send(st, fut, val):
-    return st.it.send((fut,val))
-  def act_throw(st, fut, e, tb):
-    return st.it.throw(type(e), e, tb)
-  def action(st, ret):
-    assert isinstance(st, _ItStat)
-    assert isinstance(ret, _ItReturn)
+  def post_job(pool, fut, job):
+    poo, size = pool_name(pool), pool_size(pool)
+    
+    if poo not in pool_jobs or (pool_idle[poo] == 0 and pool_num[poo] < size):
+      if poo not in pool_jobs:
+        pool_jobs[poo] = deque()
+        pool_cv[poo] = threading.Condition(lock)
+        pool_num[poo] = 0
+        pool_idle[poo] = 0
+      pool_num[poo] += 1
+      threading.Thread(target=worker_proc, kwargs={'poo':poo}).start()
+    
+    if pool_idle[poo] > 0:
+      pool_idle[poo] -= 1
+    
+    pool_jobs[poo].append((fut, job))
+    pool_cv[poo].notify()
+  
+  def worker_proc(*args, **kwargs):
+    poo = kwargs['poo']
+    jobs = pool_jobs[poo]
+    cv = pool_cv[poo]
+    
+    lock.acquire()
+    while True:
+      if len(jobs) > 0:
+        fut, job = jobs.popleft()
+        lock.release()
+        try:
+          ret = Result(job())
+        except Exception, ex:
+          ret = Raise(ex, sys.exc_traceback)
+        lock.acquire()
+        pool_idle[poo] += 1
+        finish(fut, ret)
+        awaken()
+      elif closure.quitting:
+        break
+      else:
+        cv.wait()
+    
+    pool_num[poo] -= 1
+    if pool_num[poo] == 0:
+      del pool_num[poo]
+    if len(pool_num) == 0:
+      cv_done.notify()
+    lock.release()
+  
+  def finish(fut, ret):
+    assert isinstance(fut, _Future)
+    assert isinstance(ret, _Return)
+    assert fut._ret is None
+    fut._ret = ret
     if isinstance(ret, Result):
-      return (act_send, st, ret._val)
+      meth = lambda it: it.send((fut, ret._val))
     else:
-      assert isinstance(ret, Raise)
-      return (act_throw, st, ret._ex, ret._tb)
-  
-  def finish(me, fut, ret):
-    assert isinstance(fut, Future)
-    assert isinstance(ret, _ItReturn)
+      meth = lambda it: it.throw(type(ret._ex), ret._ex, ret._tb)
     for st in fut.wait_sts:
-      acts.append(action(st, ret))
+      for fut1 in st.wait_futs:
+        if fut1 is not fut:
+          fut1.wait_sts.discard(st)
+      st.wait_futs.clear()
+      if st not in wake_meth:
+        wake_sts.append(st)
+        wake_meth[st] = meth
     fut.wait_sts.clear()
   
-  def progress():
-    while len(acts) > 0:
-      act = acts.popleft()
-      st = act[1]
+  def begin(task):
+    fut = _Future()
+    if isinstance(task, types.GeneratorType):
+      st1 = _ItStat(fut, task)
+      wake_sts.appendleft(st1)
+      wake_meth[st1] = lambda it: it.send(None)
+    elif callable(task):
+      pool = pinned_pool(task)
+      post_job(pool, fut, job)
+    else:
+      assert False
+    return fut
+  
+  def awaken():
+    while len(wake_sts) > 0:
+      st = wake_sts.popleft()
+      meth = wake_meth.pop(st)
       try:
-        got = act[0](*act[1:])
+        got = meth(st.it)
       except StopIteration:
         got = Result(None)
-      except Exception, e:
-        got = Raise(e, sys.exc_traceback)
+      except Exception, ex:
+        ex.async_future = st.parfut
+        got = Raise(ex, sys.exc_traceback)
       
-      if isinstance(got, _ItReturn):
-        if st.parfut is not None:
-          me.finish(st.parfut, got)
-        else:
-          closure.ret = got
-        closure.futs_live -= 1
-      else:
-        assert isinstance(got, WaitAny)
+      if isinstance(got, _Return):
+        finish(st.parfut, got)
+      elif isinstance(got, Begin):
+        fut = begin(got._task)
+        assert st not in wake_meth
+        wake_sts.append(st)
+        wake_meth[st] = (lambda fut: lambda it: it.send(fut1))(fut)
+      elif isinstance(got, WaitAny):
         assert len(st.wait_futs) == 0
-        for fut in got._futs:
-          if fut.done():
-            acts.appendleft(_action(
-          st.wait_futs.add(fut)
-          fut.wait_sts.add(st)
-_sched = _Scheduler()
-
-def top(a):
-  f = Future(a)
-  _sched._
+        for fut in got._futs: # test if any futures are already done, no need to sleep
+          if fut._ret is not None: # done
+            assert st not in wake_fut
+            wake_sts.appendleft(st)
+            wake_fut[st] = fut
+            break
+        if st not in wake_fut: # none were already done, put to sleep
+          for fut in got._futs:
+            st.wait_futs.add(fut)
+            fut.wait_sts.add(st)
+      else:
+        assert False
+    
+    if all(len(jobs) == 0 for jobs in pool_jobs.itervalues()):
+      closure.quitting = True
+      for poo in pool_cv:
+        pool_cv[poo].notify_all()
+  
+  lock.acquire()
+  top = begin(a)
+  awaken()
+  if not closure.quitting:
+    cv_done.wait()
+  lock.release()
+  
+  return top._ret()
 
 class Barrier(object):
   class _Box(object):
