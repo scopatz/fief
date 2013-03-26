@@ -80,7 +80,7 @@ class _Future(object):
 
 class _ItStat(object):
   def __init__(me, parfut, it):
-    assert isinstance(parfut, Future)
+    assert isinstance(parfut, _Future)
     me.parfut = parfut
     me.it = it
     me.wait_futs = set() # set of futures
@@ -151,18 +151,18 @@ def run(a):
     assert fut._ret is None
     fut._ret = ret
     if isinstance(ret, Result):
-      meth = lambda it: it.send((fut, ret._val))
+      meth = lambda it: it.send(fut)
     else:
       meth = lambda it: it.throw(type(ret._ex), ret._ex, ret._tb)
-    for st in fut.wait_sts:
+    for st in fut._wait_sts:
       for fut1 in st.wait_futs:
         if fut1 is not fut:
-          fut1.wait_sts.discard(st)
+          fut1._wait_sts.discard(st)
       st.wait_futs.clear()
       if st not in wake_meth:
         wake_sts.append(st)
         wake_meth[st] = meth
-    fut.wait_sts.clear()
+    fut._wait_sts.clear()
   
   def begin(task):
     fut = _Future()
@@ -172,7 +172,7 @@ def run(a):
       wake_meth[st1] = lambda it: it.send(None)
     elif callable(task):
       pool = pinned_pool(task)
-      post_job(pool, fut, job)
+      post_job(pool, fut, task)
     else:
       assert False
     return fut
@@ -195,19 +195,19 @@ def run(a):
         fut = begin(got._task)
         assert st not in wake_meth
         wake_sts.append(st)
-        wake_meth[st] = (lambda fut: lambda it: it.send(fut1))(fut)
+        wake_meth[st] = (lambda fut: lambda it: it.send(fut))(fut)
       elif isinstance(got, WaitAny):
         assert len(st.wait_futs) == 0
         for fut in got._futs: # test if any futures are already done, no need to sleep
           if fut._ret is not None: # done
-            assert st not in wake_fut
+            assert st not in wake_meth
             wake_sts.appendleft(st)
-            wake_fut[st] = fut
+            wake_meth[st] = (lambda fut: lambda it: it.send(fut))(fut)
             break
-        if st not in wake_fut: # none were already done, put to sleep
+        if st not in wake_meth: # none were already done, put to sleep
           for fut in got._futs:
             st.wait_futs.add(fut)
-            fut.wait_sts.add(st)
+            fut._wait_sts.add(st)
       else:
         assert False
     
@@ -225,6 +225,30 @@ def run(a):
   
   return top._ret()
 
+if True: # test code
+  import urllib2
+  def main_a():
+    def get(url):
+      print '> ' + url
+      f = urllib2.urlopen(url)
+      s = f.read(100)
+      print '< ' + url
+      return s
+    urls = ['http://www.google.com','http://www.yahoo.com','http://www.microsoft.com']
+    fut = {}
+    for u in urls:
+      fut[u] = yield Begin((lambda u: lambda: get(u))(u))
+    for u in urls:
+      f = yield WaitAny([fut[u]])
+      print 'url: ' + u
+      print f.result()
+    print 'done'
+  def b():
+    yield Begin(main_a())
+    yield Begin(main_a())
+  run(b())
+
+"""
 class Barrier(object):
   class _Box(object):
     __slots__ = ('acc','refs')
@@ -520,3 +544,4 @@ def run(it):
     raise type(closure.result_ex), closure.result_ex, closure.result_tb 
   else:
     return closure.result
+"""
