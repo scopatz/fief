@@ -103,6 +103,9 @@ class Repo(object):
     me._ifcs = frozenset(ifcs)
     me._ifc_imps = dict((ifc,frozenset(imps)) for ifc,imps in ifc_imps.iteritems())
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
+    print me._ifc_imps
+    print
+    print me._ifc_subs
     yield async.Result(me)
   
   def packages(me):
