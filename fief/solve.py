@@ -22,21 +22,21 @@ def solve(repo, ifcs):
     world_adds = []
     part_st = part.state()
     
-    loop = set([ifc])
-    loop.update(repo.pkg_ifc_reqs(pkg, ifc))
+    loop = [ifc]
+    loop.extend(repo.pkg_ifc_reqs(pkg, ifc))
     
+    # THIS LOOP NEEDS ATTENTION
     while len(loop) > 0:
       more = set()
       for i in loop:
         if i not in world:
           world.add(i)
           world_adds.append(i)
-          for s in repo.ifc_subs(i):
-            if s not in world:
-              more.add(s)
-              if part[i] == part[ifc]:
-                more.update(repo.pkg_ifc_reqs(pkg, s))
-            part.merge(i, s)
+        for s in repo.ifc_subs(i):
+          if s not in world:
+            if part[i] == part[ifc]:
+              more.update(repo.pkg_ifc_reqs(pkg, s))
+          part.merge(i, s)
       loop = more
     
     bound_adds = set()

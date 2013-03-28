@@ -61,7 +61,7 @@ class PackageScript(Package):
       yield async.Result(pack_ifx(ns['interfaces']))
 
     if me._ifx is None:
-      me._ifx = yield async.WaitFor(oven.memo_a(packed_ifx, {'py':me._py}))
+      me._ifx = yield async.Sync(oven.memo_a(packed_ifx, {'py':me._py}))
       me._ifx = unpack_ifx(me._ifx)
     
     yield async.Result(me._ifx)
@@ -88,14 +88,44 @@ class Repo(object):
     ifc_subs = {}
     
     for pkg,pobj in pkgs.iteritems():
-      ifx = yield async.WaitFor(pobj.interfaces_a(oven))
+      ifx = yield async.Sync(pobj.interfaces_a(oven))
       for ifc in ifx:
         ifcs.add(ifc)
-        ifc_imps[ifc] = ifc_imps.get(ifc, set())
+        
+        if ifc not in ifc_imps:
+          ifc_imps[ifc] = set()
         ifc_imps[ifc].add(pkg)
-        ifc_subs[ifc] = ifc_subs.get(ifc, set())
+        
+        if ifc not in ifc_subs:
+          ifc_subs[ifc] = set([ifc])
         ifc_subs[ifc].update(ifx[ifc].subsumes)
+        
         pkg_ifc_reqs[pkg,ifc] = ifx[ifc].requires
+    
+    for ifc in ifcs:
+      if ifc not in ifc_subs:
+        ifc_subs[ifc] = set([ifc])
+    
+    # transitively close ifc_subs
+    while True:
+      changed = False
+      for a,asubs in ifc_subs.iteritems():
+        for b in tuple(asubs):
+          len0 = len(asubs)
+          asubs.update(ifc_subs[b])
+          changed = changed or len0 != len(asubs)
+      if not changed: break
+    
+    # if a subsumes b, then anyone who implements a also implements b
+    for a in ifc_subs:
+      for b in ifc_subs[a]:
+        ifc_imps[b].update(ifc_imps[a])
+    
+    # to require an interface a is to also require all the interfaces it subsumes
+    for (pkg,ifc),reqs in pkg_ifc_reqs.iteritems():
+      for req in tuple(reqs):
+        reqs.update(ifc_subs[req])
+      assert ifc not in reqs
     
     me = cls()
     me._pkgs = dict(pkgs)
@@ -103,9 +133,6 @@ class Repo(object):
     me._ifcs = frozenset(ifcs)
     me._ifc_imps = dict((ifc,frozenset(imps)) for ifc,imps in ifc_imps.iteritems())
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
-    print me._ifc_imps
-    print
-    print me._ifc_subs
     yield async.Result(me)
   
   def packages(me):

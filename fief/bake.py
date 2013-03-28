@@ -44,17 +44,14 @@ def _flatten(x):
     yield x
 
 class Cmd(object):
-  def __init__(me, ctx, cwd=None, env=None, executable=None, tag=None, 
-               showout=False, showerr=True):
+  def __init__(me, ctx):
     me._ctx = ctx
     me._toks = []
     me._oxs = {}
-    me.cwd = cwd
-    me.env = env or {}
-    me.executable = executable # if os.name == 'nt' else None
-    me.tag = tag
-    me.showout = showout
-    me.showerr = showerr
+    me.cwd = None
+    me.showout = False
+    me.showerr = True
+    me.env = {}
   
   def lit(me, *toks):
     me._toks += _flatten(toks)
@@ -79,36 +76,31 @@ class Cmd(object):
   def prepare_a(me):
     for o in me._oxs:
       ix, fmt = me._oxs[o]
-      me._oxs[o] = fmt % (yield async.WaitFor(me._ctx.outfile_a(o)))
+      me._oxs[o] = fmt % (yield async.Sync(me._ctx.outfile_a(o)))
       me._toks[ix] = me._oxs[o]
     me.shline = subprocess.list2cmdline(me._toks)
     me.outs = me._oxs
   
   def exec_a(me):
     if not hasattr(me, 'shline'):
-      yield async.WaitFor(me.prepare_a())
+      yield async.Sync(me.prepare_a())
     
     def go():
       pipe = subprocess.PIPE
       env = dict(os.environ)
       env.update(me.env)
-      p = subprocess.Popen(me._toks, executable=me.executable, cwd=me.cwd, 
-                           env=env, stdin=pipe, stdout=pipe, stderr=pipe)
+      p = subprocess.Popen(me._toks, cwd=me.cwd, env=env, stdin=pipe, stdout=pipe, stderr=pipe)
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
-
-    tag = '] ' if me.tag is None else ": {0}] ".format(me.tag)
     
     if me.showerr:
-      sys.stderr.write('[RUN' + tag + me.shline + '\n')
-    yield async.WaitFor(go)
+      print >> sys.stderr, '[RUN] ' + me.shline
+    yield async.Sync(go)
     
     if me.showerr and me.stderr != '':
-      sys.stderr.write('-'*72 + '\n[MSG' + tag + me.shline + '\n' + me.stderr + \
-                       ("" if me.stderr[-1] == '\n' else '\n') + '-'*72 + '\n')
+      print >> sys.stderr, '-'*72 + '\n[ERR] ' + me.shline + '\n' + me.stderr + ('' if me.stderr[-1] == '\n' else '\n') + '-'*72
     if me.showout and me.stdout != '':
-      sys.stderr.write('-'*72 + '\n[OUT' + tag + me.shline + '\n' + me.stdout + \
-                       ("" if me.stdout[-1] == '\n' else '\n') + '-'*72 + '\n')
+      print >> sys.stderr, '-'*72 + '\n[OUT] ' + me.shline + '\n' + me.stdout + ('' if me.stdout[-1] == '\n' else '\n') + '-'*72
     
     if me.returncode != 0:
       raise subprocess.CalledProcessError(me.returncode, me.shline)
@@ -127,7 +119,7 @@ def MemoHost(host_a):
         vals[k] = cache[k]
     if len(vals) != len(keys):
       keys1 = tuple(k for k in keys if k not in vals)
-      vals1 = yield async.WaitFor(host_a(keys1, stash))
+      vals1 = yield async.Sync(host_a(keys1, stash))
       vals.update(vals1)
       cache.update(vals1)
       assert len(vals) == len(keys)
@@ -153,7 +145,7 @@ def FileHost_a(paths, stash):
       t1, h1 = 0, ''
     return (t1, h1) if (t1, h1) != (t0, h0) else old
   reals = dict((p, os.path.realpath(p)) for p in paths)
-  ans = yield async.WaitFor(stash.updates_a(reals.keys(), action))
+  ans = yield async.Sync(stash.updates_a(reals.keys(), action))
   ans = dict((k,th[1]) for k,th in ans.iteritems())
   yield async.Result(ans)
 
@@ -196,7 +188,7 @@ class MatchArgs(Match):
     me._argmem = {}
   
   def input_a(me, x, query_host_a):
-    h = yield async.WaitFor(query_host_a(x))
+    h = yield async.Sync(query_host_a(x))
     yield async.Result(TestEqual(h, lambda y: me))
   
   def arg(me, x):
@@ -217,11 +209,12 @@ class Oven(object):
     me._path = path
     me._dbcxn = None
     me._dbpath = os.path.join(path, "db")
-    me._dbaff = ("sqlite3", me._dbpath)
+    me._dbpool = async.Pool(size=1)
     me._dbtabs = set()
     me._logdb = _LogDb(me)
   
   def _dbjob(me, job):
+    @async.assign_pool(me._dbpool)
     def wrap():
       if me._dbcxn is None:
         _ensure_dirs(me._dbpath)
@@ -233,19 +226,13 @@ class Oven(object):
       return job(me._dbcxn, ensure_table)
     return wrap
   
-  def _Task_db(me, key, job):
-    return async.Task(key, me._dbjob(job), me._dbaff)
-  
-  def _WaitFor_db(me, job):
-    return async.WaitFor(me._dbjob(job), me._dbaff)
-  
   def close_a(me):
+    @async.assign_pool(me._dbpool)
     def close_it():
       if me._dbcxn is not None:
         me._dbcxn.close()
         me._dbcxn = None
-    yield async.Task(None, close_it, me._dbaff)
-    yield async.WaitAny
+    yield async.Sync(close_it)
   
   def query_a(me, keys):
     return me._host_a(keys, _Stash(me))
@@ -264,38 +251,38 @@ class Oven(object):
         cur.execute('update outdirs set bump=? where path=?', (got+1,path))
       return got
     
-    n = yield me._WaitFor_db(bump)
+    n = yield async.Sync(me._dbjob(bump))
     o = os.path.join(me._path, 'o', path, str(n))
     assert not os.path.exists(o)
     _ensure_dirs(o)
     yield async.Result(o)
   
-  def _memo_a(me, par, fun_a, argmap, hidden):
+  def _memo_a(me, par, fun_a, argmap):
     def calc_a(log):
       ctx = _Context(me, par, argmap, log)
       try:
-        result = yield async.WaitFor(fun_a(ctx))
+        result = yield async.Sync(fun_a(ctx))
       except:
         for o in ctx._outfs:
           if os.path.exists(o):
             shutil.rmtree(o)
         raise
       finally:
-        yield async.WaitFor(ctx._flush_a())        
+        yield async.Sync(ctx._flush_a())        
       yield async.Result(result)
     
-    funval = valtool.Hasher().eat(fun_a).eat(hidden).digest()
+    funval = valtool.Hasher().eat(fun_a).digest()
     view = _View(me, par, argmap)
-    log = yield async.WaitFor(me._logdb.memo_a(funval, view, calc_a))
+    log = yield async.Sync(me._logdb.memo_a(funval, view, calc_a))
     yield async.Result(log)
   
-  def memo_a(me, fun_a, argroot, hidden=None):
+  def memo_a(me, fun_a, argroot):
     assert argroot is not None
     if isinstance(argroot, dict):
       argmap = lambda x,up: argroot.get(x, None)
     else:
       argmap = lambda x,up: argroot(x)
-    log = yield async.WaitFor(me._memo_a(None, fun_a, argmap, hidden))
+    log = yield async.Sync(me._memo_a(None, fun_a, argmap))
     yield async.Result(log.result()) # will throw if fun_a did, but thats ok
   
   def search_a(me, fun_a, match):
@@ -335,7 +322,7 @@ class _Stash(object):
       except:
         cxn.rollback()
         raise
-    ans = yield me._oven._WaitFor_db(go)
+    ans = yield async.Sync(me._oven._dbjob(go))
     yield async.Result(ans)
   
   def gets_a(me, keys):
@@ -346,7 +333,6 @@ class _Stash(object):
 
 class _View(object):
   def __init__(me, oven, par, argmap):
-    object.__init__(me)
     me._oven = oven
     me._par = par
     me._argmap = argmap
@@ -355,13 +341,13 @@ class _View(object):
   def _tagkey_a(me, tag, key):
     assert tag in (_tag_inp, _tag_arg)
     if tag == _tag_inp:
-      h = yield async.WaitFor(me._hash_input_a(key))
+      h = yield async.Sync(me._hash_input_a(key))
       yield async.Result(h)
     else:
       yield async.Result(me._arg(key))
   
   def _hash_input_a(me, inp):
-    ans = yield async.WaitFor(me._oven.query_a([inp]))
+    ans = yield async.Sync(me._oven.query_a([inp]))
     yield async.Result(ans[inp])
   
   def _hash_inputs_a(me, inps):
@@ -374,7 +360,7 @@ class _View(object):
 
 class _Context(_View):
   def __init__(me, oven, par, argmap, log):
-    _View.__init__(me, oven, par, argmap)
+    super(_Context, me).__init__(oven, par, argmap)
     me._log = log
     me._inpset = set()
     me._inphold = []
@@ -392,9 +378,8 @@ class _Context(_View):
     p = os.path.realpath(path)
     return p.startswith(o + os.path.sep) # ugly, should use os.path.samefile
   
-  def outfile_a(me, *paths):
-    path = os.path.join(*paths)
-    o = yield async.WaitFor(me._oven._outfile_a(path))
+  def outfile_a(me, path):
+    o = yield async.Sync(me._oven._outfile_a(path))
     me._outfs.append(o)
     yield async.Result(o)
   
@@ -405,13 +390,13 @@ class _Context(_View):
       me._log.add(_tag_arg, x, y)
     return y
   
-  def memo_a(me, fun_a, argmap=(lambda x,up: up(x)), hidden=None):
+  def __call__(me, fun_a, argmap=(lambda x,up: up(x))):
     assert argmap is not None
     if isinstance(argmap, dict):
       d = argmap
       argmap = lambda x,up: d[x] if x in d else up(x)
     
-    log = yield async.WaitFor(me._oven._memo_a(me, fun_a, argmap, hidden))
+    log = yield async.Sync(me._oven._memo_a(me, fun_a, argmap))
     
     for tag,key,val in log.records():
       if tag == _tag_inp:
@@ -423,12 +408,9 @@ class _Context(_View):
     
     yield async.Result(log.result())
     
-  def __call__(me, fun_a, argmap=(lambda x,up: up(x))):
-    return me.memo_a(fun_a, argmap)
-    
   def _flush_a(me):
     if len(me._inphold) > 0:
-      them = yield async.WaitFor(me._hash_inputs_a(me._inphold))
+      them = yield async.Sync(me._hash_inputs_a(me._inphold))
       del me._inphold[:]
       for inf in them:
         me._log.add(_tag_inp, inf, them[inf])
@@ -439,7 +421,6 @@ _tag_arg = 2
 
 class _Log(object):
   def __init__(me, funval):
-    object.__init__(me)
     me._vals = [funval]
     me._tags = []
     me._keys = []
@@ -485,9 +466,9 @@ class _Log(object):
 
 class _LogDb(object):
   def __init__(me, oven):
-    object.__init__(me)
     me._oven = oven
     me._lock = async.Lock()
+    me._signew = async.Signal(False, lambda a,b: a or b)
     me._wips = set() # set(_Log) -- work-in-progress
     me._valenc = {}
     me._valdec = {}
@@ -562,11 +543,13 @@ class _LogDb(object):
           break
       
       if wip is None: # disjoint with all wips
-        new_wip = yield async.WaitFor(me._lock.acquire_a())
-        if not new_wip:
+        acq = me._lock.acquire()
+        new_wip = me._signew.begin_frame()
+        yield async.Wait(acq)
+        if not new_wip.aggregate():
           break
         else:
-          me._lock.release(False)
+          me._lock.release()
       else: # test disjointness with wip
         ix = 0
         val = funval
@@ -575,7 +558,7 @@ class _LogDb(object):
             disjoint.add(wip)
             break
           if ix == len(wip._tags):
-            yield async.WaitFor(wip._bar)
+            yield async.Wait(wip._bar.enlist())
           err = wip.error()
           if err is not None:
             yield async.Result(wip)
@@ -608,7 +591,7 @@ class _LogDb(object):
     tag, key = -1, None
     log = _Log(funval) # rebuild as we traverse trie
     while True:
-      got = yield me._oven._WaitFor_db(lambda cxn, enstab: step(cxn, enstab, par, tag, val))
+      got = yield async.Sync(me._oven._dbjob(lambda cxn, enstab: step(cxn, enstab, par, tag, val)))
       if got is None:
         #print >> sys.stderr, 'FAILED', tag, key, repr(val)
         log = None
@@ -618,18 +601,19 @@ class _LogDb(object):
         log.finish(key)
         break
       else:
-        val = yield async.WaitFor(view._tagkey_a(tag, key))
+        val = yield async.Sync(view._tagkey_a(tag, key))
         log.add(tag, key, val)
     
     if log is not None:
-      me._lock.release(False)
+      me._lock.release()
     else: # must compute
       log = _Log(funval)
       me._wips.add(log)
-      me._lock.release(True) # signal new wip created
+      me._signew.pulse(True) # signal new wip created
+      me._lock.release()
       
       try:
-        result = yield async.WaitFor(calc_a(log))
+        result = yield async.Sync(calc_a(log))
         log.finish(result)
       except Exception, e:
         log.explode(e, sys.exc_traceback)
@@ -685,11 +669,11 @@ class _LogDb(object):
           cxn.rollback()
           raise
       
-      yield async.WaitFor(me._lock.acquire_a())
+      yield async.Wait(me._lock.acquire())
       me._wips.discard(log)
       if log.error() is None:
-        yield me._oven._WaitFor_db(lambda cxn, enstab: insert(cxn, enstab, log))
-      me._lock.release(False)
+        yield async.Sync(me._oven._dbjob(lambda cxn, enstab: insert(cxn, enstab, log)))
+      me._lock.release()
     
     yield async.Result(log)
 
@@ -771,15 +755,17 @@ class _LogDb(object):
     oven = me._oven
     fings = [(-1, -1, TestEqual(funval, lambda y: match))]
     while len(fings) > 0:
-      fings1 = yield oven._WaitFor_db(lambda cxn, enstab: step(cxn, enstab, fings))
+      fings1 = yield async.Sync(oven._dbjob(lambda cxn, enstab: step(cxn, enstab, fings)))
       del fings[:]
+      rowtag = {}
       for row, tag, key, m in fings1:
         if tag == _tag_inp:
           def query_a(x):
-            y = yield async.WaitFor(oven.query_a((x,)))
+            y = yield async.Sync(oven.query_a((x,)))
             yield async.Result(y[x])
-          yield async.Task((row,tag), m.input_a(key, query_a))
-          #test = yield async.WaitFor(m.input_a(key, query_a))
+          fut = yield async.Begin(m.input_a(key, query_a))
+          rowtag[fut] = (row,tag)
+          #test = yield async.Sync(m.input_a(key, query_a))
         else:
           if tag == _tag_arg:
             test = m.arg(key)
@@ -790,9 +776,9 @@ class _LogDb(object):
             assert False
           if test is not TestNo:
             fings.append((row, tag, test))
-      while True:
-        got = yield async.WaitAny
-        if got is None: break
-        (row, tag), test = got
+      while len(rowtag) > 0:
+        fut = yield async.WaitAny(rowtag)
+        row, tag = rowtag.pop(fut)
+        test = fut.result()
         if test is not TestNo:
           fings.append((row, tag, test))

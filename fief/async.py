@@ -8,30 +8,20 @@ import weakref
 default_pool_size = multiprocessing.cpu_count()
 
 class Pool(object):
-  __slots__ = ('name','size')
-  def __init__(me, name, size=default_pool_size):
-    me.name = name
+  def __init__(me, size=default_pool_size):
     me.size = size
-
-def pool_name(pool):
-  return None if pool is None else pool.name
 
 def pool_size(pool):
   return default_pool_size if pool is None else pool.size
 
-class Pinned(object):
-  """a callable that is pinned to run on a named thread"""
-  def __init__(me, lam, pool):
-    me._lam = lam
-    me._pool = pool
-  def __call__(me, *a, **kw):
-    return me._lam(*a, **kw)
+def assign_pool(pool):
+  def lam(f):
+    f.async_pool = pool
+    return f
+  return lam
 
-def pinned(pool):
-  return lambda lam: Pinned(lam, pool)
-
-def pinned_pool(lam):
-  return None if type(lam) is not Pinned else lam._pool
+def assigned_pool(lam):
+  return lam.async_pool if hasattr(lam, 'async_pool') else None
 
 class _Return(object):
   pass
@@ -59,16 +49,22 @@ class Begin(_Yield):
   def __init__(me, task):
     me._task = task
 
-class WaitAny(_Yield):
-  __slots__ = ('_futs',)
-  def __init__(me, futs):
-    assert len(futs) > 0
-    me._futs = futs
-
 class Sync(_Yield):
   __slots__ = ('_task',)
   def __init__(me, task):
+    assert not isinstance(task, _Future)
     me._task = task
+
+class Wait(_Yield):
+  __slots__ = ('_fut',)
+  def __init__(me, fut):
+    assert isinstance(fut, _Future)
+    me._fut = fut
+
+class WaitAny(_Yield):
+  __slots__ = ('_futs',)
+  def __init__(me, futs):
+    me._futs = futs
 
 class _Future(object):
   def __init__(me):
@@ -89,8 +85,12 @@ class _Future(object):
     for st in me._wait_sts:
       for fut in st.wait_futs:
         if fut is not me:
+          assert st in fut._wait_sts
           fut._wait_sts.discard(st)
-      st.wake(me)
+      st.wait_futs = None
+      st.wake_fut = me
+      st.wake()
+    me._wait_sts.clear()
 
 class Future(_Future):
   def __init__(me):
@@ -98,6 +98,225 @@ class Future(_Future):
   
   def finish(me, value=None):
     me._finish(Result(value))
+  
+  def explode(me, ex, tb=None):
+    me._finish(Raise(type(ex), ex, tb))
+
+def run(a):
+  lock = threading.Lock()
+  cv_main = threading.Condition(lock)
+  pool_num = {} # {Pool: int} -- number of spawned threads in pool
+  pool_idle = {} # {Pool: int} -- number of idle threads in pool
+  pool_cv = {} # {Pool: Condition}
+  pool_jobs = {} # {Pool: deque(callable)}
+  wake_list = deque() # deque(ItStat) -- queue of iters to wake, no duplicates
+  wake_set = set() # set(ItStat) -- set of iters to wake, matches wake_list
+  class closure:
+    jobs_notdone = 0
+    quitting = False
+  
+  def post_job(pool, fut, job):
+    size = pool_size(pool)
+    if pool not in pool_jobs or (pool_idle[pool] <= 0 and pool_num[pool] < size):
+      if pool not in pool_jobs:
+        pool_jobs[pool] = deque()
+        pool_cv[pool] = threading.Condition(lock)
+        pool_num[pool] = 0
+        pool_idle[pool] = 0
+      pool_num[pool] += 1
+      pool_idle[pool] += 1
+      threading.Thread(target=worker_proc, kwargs={'pool':pool}).start()
+    
+    pool_idle[pool] -= 1
+    closure.jobs_notdone += 1
+    pool_jobs[pool].append((fut, job))
+    pool_cv[pool].notify()
+  
+  def worker_proc(*args, **kwargs):
+    pool = kwargs['pool']
+    jobs = pool_jobs[pool]
+    cv = pool_cv[pool]
+    
+    lock.acquire()
+    while True:
+      while len(jobs) > 0:
+        while len(jobs) > 0:
+          fut, job = jobs.popleft()
+          lock.release()
+          try:
+            ret = Result(job())
+          except Exception, ex:
+            ret = Raise(ex, sys.exc_traceback)
+          lock.acquire()
+          pool_idle[pool] += 1
+          closure.jobs_notdone -= 1
+          fut._finish(ret)
+          if len(wake_list) > 0 and len(jobs) > 0:
+            # tell the main thread it should do the awakening, we have more jobs to do
+            cv_main.notify()
+        # since we're out of jobs we might as well wake up some iterators
+        awaken()
+      if closure.quitting: break
+      cv.wait()
+    
+    pool_num[pool] -= 1
+    if pool_num[pool] == 0:
+      del pool_num[pool]
+    if len(pool_num) == 0:
+      cv_main.notify() # tell main all worker threads have exited
+    lock.release()
+  
+  class ItStat(object):
+    __slots__ = (
+      'trace', # deque((file,name,line)) -- most recent stack of iterators
+      'par_fut', # _Future -- future representing the result of this iterator
+      'it', # iterator routine
+      'wait_futs', # tuple(_Future) -- futures this suspended iterator is waiting on
+      'wake_meth', # lambda ItStat: _Yield -- how to awaken suspended iterator
+      'wake_fut', # future with which to wake iterator
+    )
+    
+    def __init__(me, par_st, par_fut, it):
+      assert par_st is None or isinstance(par_st, ItStat)
+      assert isinstance(par_fut, _Future)
+      me.par_fut = par_fut
+      me.it = it
+      me.wait_futs = None
+      me.wake_meth = None
+      me.wake_fut = None
+      if par_st is not None:
+        me.trace = list(par_st.trace[1 if len(par_st.trace)>=50 else 0:])
+        me.trace.append((
+          par_st.it.gi_code.co_filename,
+          par_st.it.gi_code.co_name,
+          par_st.it.gi_frame.f_lineno if par_st.it.gi_frame is not None else None
+        ))
+      else:
+        me.trace = ()
+    
+    def wake(me):
+      if me not in wake_set:
+        wake_list.append(me)
+        wake_set.add(me)
+    
+    def traceback(me):
+      lines = ['Asynchronous traceback (most recent call last):']
+      if len(me.trace) >= 50:
+        lines.append('  ...')
+      fmt = '  File "%s", line %s, in %s'
+      for file,name,lno in me.trace:
+        lno = '?' if lno is None else str(lno)
+        lines.append(fmt % (file, lno, name))
+      lno = '?' if me.it.gi_frame is None else str(me.it.gi_frame.f_lineno)
+      lines.append(fmt % (me.it.gi_code.co_filename, lno, me.it.gi_code.co_name))
+      return '\n'.join(lines)
+  
+  send_none = lambda st: st.it.send(None)
+  send_fut = lambda st: st.it.send(st.wake_fut)
+  def send_result(st):
+    ret = st.wake_fut._ret
+    if type(ret) is Result:
+      return st.it.send(ret._val)
+    elif type(ret) is Raise:
+      return st.it.throw(type(ret._ex), ret._ex, ret._tb)
+    else:
+      assert False
+  
+  def begin(par_st, task):
+    fut = _Future()
+    if isinstance(task, types.GeneratorType):
+      st = ItStat(par_st, fut, task.__iter__())
+      wake_list.appendleft(st)
+      wake_set.add(st)
+      st.wake_meth = send_none
+    elif callable(task):
+      pool = assigned_pool(task)
+      post_job(pool, fut, task)
+    else:
+      assert False
+    return fut
+  
+  def awaken():
+    # just keep pulling iterators off the wake_list until she's empty
+    while len(wake_list) > 0:
+      st = wake_list.popleft()
+      wake_set.discard(st)
+      assert st.wait_futs is None
+      
+      try:
+        got = st.wake_meth(st)
+      except StopIteration:
+        got = Result(None)
+      except Exception, ex:
+        if not hasattr(ex, 'async_traceback'):
+          ex.async_traceback = st.traceback()
+        got = Raise(ex, sys.exc_traceback)
+      
+      if isinstance(got, _Return):
+        st.par_fut._finish(got)
+      elif isinstance(got, Begin):
+        assert st not in wake_set
+        fut = begin(st, got._task)
+        wake_list.append(st)
+        wake_set.add(st)
+        st.wake_fut = fut
+        st.wake_meth = send_fut
+      elif isinstance(got, Sync):
+        fut = begin(st, got._task)
+        st.wait_futs = (fut,)
+        assert st not in fut._wait_sts
+        fut._wait_sts.add(st)
+        st.wake_meth = send_result
+      elif isinstance(got, Wait):
+        fut = got._fut
+        if fut._ret is not None: # done
+          assert st not in wake_set
+          wake_list.appendleft(st)
+          wake_set.add(st)
+          st.wake_fut = fut
+        else:
+          st.wait_futs = (fut,)
+          assert st not in fut._wait_sts
+          fut._wait_sts.add(st)
+        st.wake_meth = send_result
+      elif isinstance(got, WaitAny):
+        futs = tuple(got._futs)
+        empty = True
+        for fut in futs: # test if any futures are already done, no need to sleep
+          assert isinstance(fut, _Future)
+          empty = False
+          if fut._ret is not None: # done
+            assert st not in wake_set
+            wake_list.appendleft(st)
+            wake_set.add(st)
+            st.wake_fut = fut
+            break
+        assert not empty # waiting on the empty set means wait forever, we'll assume the user goofed
+        if st not in wake_set: # none were already done, suspend st
+          st.wait_futs = futs
+          for fut in st.wait_futs:
+            assert st not in fut._wait_sts
+            fut._wait_sts.add(st)
+        st.wake_meth = send_fut
+      else:
+        assert False
+    
+    if closure.jobs_notdone == 0:
+      closure.quitting = True
+      for cv in pool_cv.itervalues():
+        cv.notify_all()
+  
+  lock.acquire()
+  top = begin(None, a)
+  while not closure.quitting:
+    awaken()
+    if closure.quitting: break
+    cv_main.wait()
+  
+  if len(pool_num) > 0: # not all worker threads have exited yet
+    cv_main.wait()
+  lock.release()
+  return top.result()
 
 class Lock(object):
   def __init__(me):
@@ -152,184 +371,14 @@ class Signal(object):
   def begin_frame(me):
     if me._frame_reuse is None:
       frame = _Frame(me._seed)
-      me._frame_reuse = frame
       me._frames[frame] = None
+      me._frame_reuse = frame
     return me._frame_reuse
   
   def pulse(me, x):
     me._frame_reuse = None
     for frame in me._frames:
       frame._acc = me._fold(frame._acc, x)
-
-def run(a):
-  lock = threading.Lock()
-  cv_done = threading.Condition(lock)
-  pool_num = {} # {pool.name: int} -- number of spawned threads in pool
-  pool_idle = {} # {pool.name: int} -- number of idle threads in pool
-  pool_cv = {} # {pool.name: Condition}
-  pool_jobs = {} # {pool.name: deque(callable)}
-  wake_list = deque() # deque(ItStat) -- queue of iters to wake, no duplicates
-  wake_set = set() # set(ItStat) -- set of iters to wake, matches wake_list
-  class closure:
-    jobs_notdone = 0
-    quitting = False
-  
-  def post_job(pool, fut, job):
-    poo, size = pool_name(pool), pool_size(pool)
-    
-    if poo not in pool_jobs or (pool_idle[poo] == 0 and pool_num[poo] < size):
-      if poo not in pool_jobs:
-        pool_jobs[poo] = deque()
-        pool_cv[poo] = threading.Condition(lock)
-        pool_num[poo] = 0
-        pool_idle[poo] = 0
-      pool_num[poo] += 1
-      threading.Thread(target=worker_proc, kwargs={'poo':poo}).start()
-    
-    if pool_idle[poo] > 0:
-      pool_idle[poo] -= 1
-    
-    closure.jobs_notdone += 1
-    pool_jobs[poo].append((fut, job))
-    pool_cv[poo].notify()
-  
-  def worker_proc(*args, **kwargs):
-    poo = kwargs['poo']
-    jobs = pool_jobs[poo]
-    cv = pool_cv[poo]
-    
-    lock.acquire()
-    while True:
-      if len(jobs) > 0:
-        fut, job = jobs.popleft()
-        lock.release()
-        try:
-          ret = Result(job())
-        except Exception, ex:
-          ret = Raise(ex, sys.exc_traceback)
-        lock.acquire()
-        pool_idle[poo] += 1
-        closure.jobs_notdone -= 1
-        fut._finish(ret)
-        awaken()
-      elif closure.quitting:
-        break
-      else:
-        cv.wait()
-    
-    pool_num[poo] -= 1
-    if pool_num[poo] == 0:
-      del pool_num[poo]
-    if len(pool_num) == 0:
-      cv_done.notify()
-    lock.release()
-  
-  class ItStat(object):
-    __slots__ = (
-      'par_fut', # _Future -- parent future
-      'it', # iterator routine
-      'wait_futs', # tuple(_Future) -- futures this suspended iterator is waiting on
-      'wake_meth', # lambda ItStat: _Yield -- how to awaken suspended iterator
-      'wake_fut', # future with which to wake iterator
-    )
-    
-    def __init__(me, par_fut, it):
-      assert isinstance(par_fut, _Future)
-      me.par_fut = par_fut
-      me.it = it
-      me.wait_futs = None
-      me.wake_meth = None
-      me.wake_fut = None
-    
-    def wake(me, fut):
-      me.wait_futs = None
-      if me not in wake_set:
-        wake_list.append(me)
-        wake_set.add(me)
-        me.wake_fut = fut
-  
-  send_none = lambda st: st.it.send(None)
-  send_fut = lambda st: st.it.send(st.wake_fut)
-  def send_sync(st):
-    ret = st.wake_fut._ret
-    if type(ret) is Result:
-      return st.it.send(ret._val)
-    elif type(ret) is Raise:
-      return st.it.throw(type(ret._ex), ret._ex, ret._tb)
-    else:
-      assert False
-  
-  def begin(task):
-    fut = _Future()
-    if isinstance(task, types.GeneratorType):
-      st = ItStat(fut, task.__iter__())
-      wake_list.appendleft(st)
-      wake_set.add(st)
-      st.wake_meth = send_none
-    elif callable(task):
-      pool = pinned_pool(task)
-      post_job(pool, fut, task)
-    else:
-      assert False
-    return fut
-  
-  def awaken():
-    while len(wake_list) > 0:
-      st = wake_list.popleft()
-      wake_set.discard(st)
-      try:
-        got = st.wake_meth(st)
-      except StopIteration:
-        got = Result(None)
-      except Exception, ex:
-        ex.async_future = st.par_fut
-        got = Raise(ex, sys.exc_traceback)
-      
-      if isinstance(got, _Return):
-        st.par_fut._finish(got)
-      elif isinstance(got, Begin):
-        fut = begin(got._task)
-        assert st not in wake_set
-        wake_list.append(st)
-        wake_set.add(st)
-        st.wake_fut = fut
-        st.wake_meth = send_fut
-      elif isinstance(got, WaitAny):
-        assert st.wait_futs is None
-        for fut in got._futs: # test if any futures are already done, no need to sleep
-          if fut._ret is not None: # done
-            assert st not in wake_set
-            wake_list.appendleft(st)
-            wake_set.add(st)
-            st.wake_fut = fut
-            st.wake_meth = send_fut
-            break
-        if st not in wake_set: # none were already done, suspend st
-          st.wait_futs = tuple(got._futs)
-          for fut in st.wait_futs:
-            fut._wait_sts.add(st)
-      elif isinstance(got, Sync):
-        fut = begin(got._task)
-        assert fut._ret is None
-        assert st.wait_futs is None
-        st.wait_futs = (fut,)
-        fut._wait_sts.add(st)
-        st.wake_meth = send_sync
-      else:
-        assert False
-    
-    if closure.jobs_notdone == 0:
-      closure.quitting = True
-      for cv in pool_cv.itervalues():
-        cv.notify_all()
-  
-  lock.acquire()
-  top = begin(a)
-  awaken()
-  if not closure.quitting:
-    cv_done.wait()
-  lock.release()
-  return top.result()
 
 if False: # test code
   import urllib2
