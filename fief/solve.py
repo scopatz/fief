@@ -4,40 +4,36 @@ def solve(repo, ifcs):
   Each dict will be complete with all dependencies and subsumed interfaces."""
   
   # solver state
+  world = set(repo.ifcs_subs(ifcs)) # interfaces not yet bound
   part = DisjointSets() # equivalence partition for interface subsumption
-  world = set() # all interfaces seen so far
-  bound = {} # bound interfaces to packages
-  unbound = set(ifcs) # interfaces not yet bound
+  bound = {} # bound interface reps to packages
+  
+  for a in world:
+    for b in repo.ifc_subs(a):
+      part.merge(a, b)
+  
+  unbound = set(part[i] for i in world) # interface reps not yet bound
   
   # modify state of solver by binding ifc to pkg, returns `revert` lambda if
   # successful, otherwise None.
   def bind(ifc, pkg):
     assert all(i not in bound for i in unbound)
-    assert ifc not in bound
-    assert ifc in unbound
+    assert part[ifc] not in bound
+    assert part[ifc] in unbound
     
-    bound[ifc] = pkg
-    unbound.discard(ifc)
+    #bound[ifc] = pkg
+    #unbound.discard(ifc)
     
     world_adds = []
     part_st = part.state()
     
-    loop = [ifc]
-    loop.extend(repo.pkg_ifc_reqs(pkg, ifc))
-    
-    # THIS LOOP NEEDS ATTENTION
-    while len(loop) > 0:
-      more = set()
-      for i in loop:
-        if i not in world:
-          world.add(i)
-          world_adds.append(i)
+    reqs = repo.pkg_ifc_reqs(pkg, ifc)
+    for i in reqs:
+      if i not in world:
+        world_adds.append(i)
+        world.add(i)
         for s in repo.ifc_subs(i):
-          if s not in world:
-            if part[i] == part[ifc]:
-              more.update(repo.pkg_ifc_reqs(pkg, s))
           part.merge(i, s)
-      loop = more
     
     bound_adds = set()
     unbound_adds = []

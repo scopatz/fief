@@ -127,6 +127,11 @@ class Repo(object):
         reqs.update(ifc_subs[req])
       assert ifc not in reqs
     
+    # requirements subsume
+    for (pkg,a),reqs in pkg_ifc_reqs.iteritems():
+      for b in ifc_subs[a]:
+        reqs.update(pkg_ifc_reqs.get((pkg,b), frozenset()))
+    
     me = cls()
     me._pkgs = dict(pkgs)
     me._pkg_ifc_reqs = pkg_ifc_reqs
@@ -148,6 +153,13 @@ class Repo(object):
     """Maps interface to set of interfaces it subsumes, not necessarily 
     closed under transitivity."""
     return me._ifc_subs.get(ifc, frozenset())
+  
+  def ifcs_subs(me, ifcs):
+    un = set()
+    for i in ifcs:
+      if i in me._ifcs_subs:
+        un.update(me._ifcs_subs[i])
+    return un
   
   def ifc_imps(me, ifc):
     """Maps interface to set of packages that implements it."""
