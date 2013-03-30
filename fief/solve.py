@@ -4,14 +4,14 @@ def solve(repo, ifcs):
   Each dict will be complete with all dependencies and subsumed interfaces."""
   
   # solver state
-  world = set(repo.ifcs_subs(ifcs)) # interfaces not yet bound
   part = DisjointSets() # equivalence partition for interface subsumption
-  bound = {} # bound interface reps to packages
+  world = set(repo.ifcs_subs(ifcs)) # interfaces seen so far
   
   for a in world:
     for b in repo.ifc_subs(a):
       part.merge(a, b)
   
+  bound = {} # bound interface reps to packages
   unbound = set(part[i] for i in world) # interface reps not yet bound
   
   # modify state of solver by binding ifc to pkg, returns `revert` lambda if
@@ -21,19 +21,17 @@ def solve(repo, ifcs):
     assert part[ifc] not in bound
     assert part[ifc] in unbound
     
-    #bound[ifc] = pkg
-    #unbound.discard(ifc)
-    
-    world_adds = []
     part_st = part.state()
+    world_adds = []
+    changed = set()
     
-    reqs = repo.pkg_ifc_reqs(pkg, ifc)
-    for i in reqs:
+    for i in repo.pkg_ifc_reqs(pkg, ifc):
       if i not in world:
-        world_adds.append(i)
         world.add(i)
+        world_adds.append(i)
         for s in repo.ifc_subs(i):
-          part.merge(i, s)
+          if part[i] != part[s]:
+            changed.update(part.members(part.merge(i, s)))
     
     bound_adds = set()
     unbound_adds = []
@@ -42,38 +40,47 @@ def solve(repo, ifcs):
     def revert():
       part.revert(part_st)
       world.difference_update(world_adds)
-      
       for i in bound_adds:
         del bound[i]
-      del bound[ifc]
-      
       unbound.difference_update(unbound_adds)
       unbound.update(unbound_dels)
-      unbound.add(ifc)
     
-    for i in bound.keys():
-      i1 = part[i]
-      if i1 != i:
+    bound[ifc] = pkg
+    bound_adds.add(ifc)
+    unbound.discard(ifc)
+    unbound_dels.add(ifc)
+    
+    for i in changed:
+      if i in bound:
+        i1 = part[i]
+        if i != i1:
+          if i1 in bound:
+            if bound[i] != bound[i1]:
+              revert()
+              return None
+          else:
+            bound[i1] = bound[i]
+            bound_adds.add(i1)
+    
+    for i in changed:
+      if i in unbound:
+        i1 = part[i]
         if i1 in bound:
-          if bound[i] != bound[i1]:
-            revert()
-            return None
-        else:
-          bound[i1] = bound[i]
-          bound_adds.add(i1)
-    
-    for i in unbound:
-      i1 = part[i]
-      if i1 in bound:
-        unbound_dels.add(i1)
-    unbound.difference_update(unbound_dels)
+          unbound.discard(i)
+          unbound_dels.add(i)
+        elif i != i1:
+          unbound.discard(i)
+          unbound_dels.add(i)
+          if i1 not in unbound:
+            unbound.add(i1)
+            unbound_adds.append(i1)
     
     for i in world_adds:
       i1 = part[i]
       if i1 not in bound and i1 not in unbound:
         unbound.add(i1)
         unbound_adds.append(i1)
-    
+    print 'world:', world
     return revert
   
   def branch():
@@ -122,9 +129,9 @@ class DisjointSets(object):
     """Get all members of the set that contains x."""
     x = me[x]
     if x in me._mbr:
-      return frozenset(me._mbr[x])
+      return me._mbr[x]
     else:
-      return frozenset([x])
+      return (x,)
   
   def merge(me, a, b):
     """Union the two sets containing a and b."""
@@ -137,7 +144,7 @@ class DisjointSets(object):
       if x not in rep:
         rep[x] = x
         dep[x] = 0
-        mbr[x] = set([x])
+        mbr[x] = [x]
       else:
         x1 = rep[x]
         while x != x1:
@@ -152,13 +159,17 @@ class DisjointSets(object):
       if dep[a] <= dep[b]:
         log.extend((a, dep[b]))
         rep[a] = b
-        mbr[b].update(mbr[a])
+        mbr[b].extend(mbr[a])
         if dep[a] == dep[b]:
           dep[b] += 1
+        return b
       else:
         log.extend((b, dep[a]))
         rep[b] = a
-        mbr[a].update(mbr[b])
+        mbr[a].extend(mbr[b])
+        return a
+    else:
+      return a
   
   def state(me):
     return len(me._log)
@@ -170,5 +181,5 @@ class DisjointSets(object):
       dep_b, a = log.pop(), log.pop()
       b = rep[a]
       rep[a] = a
-      mbr[b].difference_update(mbr[a])
+      del mbr[b][len(mbr[b])-len(mbr[a]):]
       dep[b] = dep_b

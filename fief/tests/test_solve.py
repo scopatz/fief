@@ -25,7 +25,7 @@ sditems = lambda x: set(frozenset(d.iteritems()) for d in x)
 
 def check_case(pkgs, ifcs, exp):
   def a():
-    repo = yield async.WaitFor(Repo.new_a(None, pkgs))
+    repo = yield async.Sync(Repo.new_a(None, pkgs))
     obs = sditems(solve(repo, ifcs))
     assert_equal(obs, sditems(exp))
   async.run(a())

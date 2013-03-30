@@ -157,8 +157,8 @@ class Repo(object):
   def ifcs_subs(me, ifcs):
     un = set()
     for i in ifcs:
-      if i in me._ifcs_subs:
-        un.update(me._ifcs_subs[i])
+      if i in me._ifc_subs:
+        un.update(me._ifc_subs[i])
     return un
   
   def ifc_imps(me, ifc):
