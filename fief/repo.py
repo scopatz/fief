@@ -13,7 +13,7 @@ import fetch
 
 def fetch_nomemo_a(ctx, pkg):
   """Returns a tuple (path, cleanup)"""
-  got = yield async.WaitFor(fetch.retrieve_source_a(pkg))
+  got = yield async.Sync(fetch.retrieve_source_a(pkg))
   if not got:
     raise RuntimeError("failed to retrieve {0}".format(pkg))
   packages[pkg].source = got
@@ -40,7 +40,7 @@ def stage_nomemo_a(ctx, pkg):
     c.lit('tar', 'xzf').inf(ball)
   elif ball.endswith('.tar.bz2'):
     c.lit('tar', 'xjf').inf(ball)
-  yield async.WaitFor(c.exec_a())
+  yield async.Sync(c.exec_a())
 
   bld2 = os.path.join(bld, name)
   if not os.path.exists(bld2):
@@ -135,7 +135,7 @@ def upgrade_to_avoid_a(oven, ifc2pkg):
           d[arg[1]] = args[arg]
       built[pkg].append(d)
 
-    yield async.WaitFor(oven.search_a(packages[pkg].builder, 
+    yield async.Sync(oven.search_a(packages[pkg].builder, 
                                       bake.MatchArgs(argtest, collector)))
 
   i2p = {}
@@ -228,7 +228,7 @@ def init_a(oven, repo_pkgs):
   for name, tup in repo_pkgs.iteritems():
     pkg = Package(name, tup)
     packages[name] = pkg
-    ifx = yield async.WaitFor(oven.memo_a(packed_ifx_a, {'builder_py':pkg.builder_py}))
+    ifx = yield async.Sync(oven.memo_a(packed_ifx_a, {'builder_py':pkg.builder_py}))
     ifx = _unpack_ifx(ifx)
     pkg.interfaces = ifx
     for ifc in ifx:
@@ -306,13 +306,13 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
   def build_a(ctx):
     pkg = ctx['pkg']
     assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
-    psrc = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
-    env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
+    psrc = yield async.Sync(fetch_nomemo_a(ctx, pkg))
+    env = yield async.Sync(realize_deps_a(ctx, interfaces))
 
     try:
-      src, cleanup = yield async.WaitFor(stage_nomemo_a(ctx, pkg))
+      src, cleanup = yield async.Sync(stage_nomemo_a(ctx, pkg))
   
-      to = yield async.WaitFor(ctx.outfile_a('build', pkg))
+      to = yield async.Sync(ctx.outfile_a('build', pkg))
       to = os.path.abspath(to)
       os.mkdir(to)
   
@@ -321,21 +321,21 @@ def configure_make_make_install(interfaces, libs=(), configure_args=(),
       c.tag = pkg
       c.env = env
       c.lit('./configure', '--prefix=' + to, configure_args)
-      yield async.WaitFor(c.exec_a())
+      yield async.Sync(c.exec_a())
   
       c = Cmd(ctx)
       c.cwd = src
       c.tag = pkg
       c.env = env
       c.lit(conf.make, make_args)
-      yield async.WaitFor(c.exec_a())
+      yield async.Sync(c.exec_a())
 
       c = Cmd(ctx)
       c.cwd = src
       c.tag = pkg
       c.env = env
       c.lit(conf.make_install, make_install_args)
-      yield async.WaitFor(c.exec_a())
+      yield async.Sync(c.exec_a())
     finally:
       cleanup()
 
@@ -366,12 +366,12 @@ def python_setup_install(interfaces):
   """
   def build_a(ctx):
     pkg = ctx['pkg']
-    psrc = yield async.WaitFor(fetch_nomemo_a(ctx, pkg))
-    env = yield async.WaitFor(realize_deps_a(ctx, interfaces))
+    psrc = yield async.Sync(fetch_nomemo_a(ctx, pkg))
+    env = yield async.Sync(realize_deps_a(ctx, interfaces))
 
     try:
-      src, cleanup = yield async.WaitFor(stage_nomemo_a(ctx, pkg))
-      to = yield async.WaitFor(ctx.outfile_a('build', pkg))
+      src, cleanup = yield async.Sync(stage_nomemo_a(ctx, pkg))
+      to = yield async.Sync(ctx.outfile_a('build', pkg))
       to = os.path.abspath(to)
       os.mkdir(to)
 
@@ -380,7 +380,7 @@ def python_setup_install(interfaces):
       c.tag = pkg
       c.env = env
       c.lit('python', 'setup.py', 'install', '--prefix=' + to)
-      yield async.WaitFor(c.exec_a())
+      yield async.Sync(c.exec_a())
     finally:
       cleanup()
 

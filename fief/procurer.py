@@ -49,7 +49,7 @@ class Procurer(object):
         except urllib.ContentTooShort, e:
           got = None
         return got
-      got = yield async.WaitFor(task)
+      got = yield async.Sync(task)
     else:
       got = locf
     yield async.Result(got)
@@ -58,9 +58,9 @@ class Procurer(object):
     """returns async lambda ctx ~> (path,cleanup)"""
     for x in canonify_source(src):
       while me._live == me.maxlive:
-        yield async.WaitFor(me._bar)
+        yield async.Sync(me._bar)
       me._live += 1
-      got = yield async.WaitFor(_begin[x[0]](me, *x[1:]))
+      got = yield async.Sync(_begin[x[0]](me, *x[1:]))
       me._live -= 1
       me._bar.fireone()
       if got is not None:
@@ -70,11 +70,11 @@ class Procurer(object):
 _begin = {} # a begin method asynchronously returns either ctx~>(path,cleanup) or None
 
 def _begin_url_a(me, subkind, url):
-  f = yield async.WaitFor(me._download_a(url))
+  f = yield async.Sync(me._download_a(url))
   if f is None:
     yield async.Result(None)
   else:
-    got = yield async.WaitFor(_begin[subkind](me, f))
+    got = yield async.Sync(_begin[subkind](me, f))
     yield async.Result(got)
 
 _begin['url'] = _begin_url_a
@@ -100,7 +100,7 @@ def _begin_tarball_a(me, path):
     if os.name == 'nt':
       path = path.split(':',1)[1]
     c.lit(lits).inf(path)
-    yield async.WaitFor(c.exec_a())
+    yield async.Sync(c.exec_a())
     
     ls = os.listdir(tmpd)
     if len(ls) == 1:

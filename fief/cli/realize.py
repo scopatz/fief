@@ -19,10 +19,10 @@ def main(ns, config):
     oven = bake.Oven(bake.MemoHost(bake.FileHost_a), "oven")
     repo.Cmd.showout = ns.verbose
     pkgs = repos['packages']
-    yield async.WaitFor(repo.init_a(oven, pkgs))
+    yield async.Sync(repo.init_a(oven, pkgs))
     fetch._init(pkgs)
     activated = _magic.env_selection(config)
-    ans = yield async.WaitFor(deliver.deliver_a(oven, activated, ns.lazy))
+    ans = yield async.Sync(deliver.deliver_a(oven, activated, ns.lazy))
     yield async.Result(ans)
 
   try:

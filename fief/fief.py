@@ -39,6 +39,6 @@ class Fief(object):
     
     me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
     me.oven = bake.Oven(bake.MemoHost(bake.FileHost_a), os.path.join(me._path_stash, 'oven'))
-    me.repo = yield async.WaitFor(repository.Repo.new_a(me.oven, me._pkgs))
+    me.repo = yield async.Sync(repository.Repo.new_a(me.oven, me._pkgs))
     
     yield async.Result(me)

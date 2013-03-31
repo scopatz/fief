@@ -13,7 +13,7 @@ ifc = respository.ifc
 
 def deliver_a(me, fief, ifcs):
   oven = fief.oven
-  repo = yield async.WaitFor(fief.repo_a())
+  repo = yield async.Sync(fief.repo_a())
   
   def less(ifc, a, b):
     return a == conf.preferences.get(ifc)
@@ -97,7 +97,7 @@ def deliver_a(me, fief, ifcs):
       bconf = BoundConf(conf, ctx)
       # BROKEN, pick up here
       def build_a(ctx):
-        yield async.WaitFor(bldr(ctx))
+        yield async.Sync(bldr(ctx))
       yield async.Task(pkg, oven.memo_a(build_a, args))
     
 
