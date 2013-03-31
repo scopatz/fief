@@ -155,6 +155,7 @@ class Repo(object):
     return me._ifc_subs.get(ifc, frozenset())
   
   def ifcs_subs(me, ifcs):
+    """union(ifc_subs(i) for i in ifcs)"""
     un = set()
     for i in ifcs:
       if i in me._ifc_subs:
@@ -168,3 +169,11 @@ class Repo(object):
   def pkg_ifc_reqs(me, pkg, ifc):
     """Returns set of interfaces that are required if `pkg` were to implement `ifc`."""
     return me._pkg_ifc_reqs.get((pkg,ifc), frozenset())
+  
+  def pkg_ifcs_reqs(me, pkg, ifcs):
+    """union(pkg_ifc_subs(pkg,i) for i in ifcs)"""
+    un = set()
+    for i in ifcs:
+      if (pkg,i) in me._pkg_ifc_reqs:
+        un.update(me._pkg_ifc_reqs[pkg,i])
+    return un

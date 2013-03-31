@@ -121,7 +121,9 @@ cases = ( # pkgs, exp
   }, 
  ['hdf5-parallel'],
  [{'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
-   'mpi': 'mpich'}, None]),
+   'mpi': 'mpich'},
+  {'zlib': 'zlib', 'cc': 'sys_cc', 'hdf5': 'hdf5', 'hdf5-parallel': 'hdf5', 
+   'mpi': 'openmpi'}]),
 )
 
 def test_cases():
