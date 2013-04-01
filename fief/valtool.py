@@ -110,15 +110,23 @@ class Hasher(object):
         h.update('cycle.%x.' % open_set[x])
         n = 0
       else:
-        t = type(x)
-        a = act.get(t, None)
-        if a is not None:
-          n = len(s)
-          a(h,s,x)
-          n = len(s) - n
-        else:
-          h.update('?')
-          n = 0
+        x1 = x
+        while True:
+          t = type(x1)
+          a = act.get(t, None)
+          if a is not None:
+            n = len(s)
+            a(h,s,x1)
+            n = len(s) - n
+            break
+          else:
+            if hasattr(x1, '__getstate__'):
+              x1 = x1.__getstate__()
+            else:
+              h.update('?')
+              n = 0
+              break
+
       if n == 0:
         while True:
           if len(open_num) == 0:

@@ -103,12 +103,19 @@ class Future(_Future):
     me._finish(Raise(type(ex), ex, tb))
 
 def run(a):
+  deft_pool = Pool(size=default_pool_size)
+  class PoolSt(object):
+    __slots__ = ('ref_pool','num','idle','cv','jobs')
+    def __init__(me, pool):
+      me.ref_pool = weakref.ref(pool)
+      me.num = 0
+      me.idle = 0
+      me.cv = threading.Condition(lock)
+      me.jobs = deque()
+  
   lock = threading.Lock()
   cv_main = threading.Condition(lock)
-  pool_num = {} # {Pool: int} -- number of spawned threads in pool
-  pool_idle = {} # {Pool: int} -- number of idle threads in pool
-  pool_cv = {} # {Pool: Condition}
-  pool_jobs = {} # {Pool: deque(callable)}
+  pool_sts = weakref.WeakKeyDictionary()
   wake_list = deque() # deque(ItStat) -- queue of iters to wake, no duplicates
   wake_set = set() # set(ItStat) -- set of iters to wake, matches wake_list
   class closure:
@@ -116,54 +123,44 @@ def run(a):
     quitting = False
   
   def post_job(pool, fut, job):
-    size = pool_size(pool)
-    if pool not in pool_jobs or (pool_idle[pool] <= 0 and pool_num[pool] < size):
-      if pool not in pool_jobs:
-        pool_jobs[pool] = deque()
-        pool_cv[pool] = threading.Condition(lock)
-        pool_num[pool] = 0
-        pool_idle[pool] = 0
-      pool_num[pool] += 1
-      pool_idle[pool] += 1
-      threading.Thread(target=worker_proc, kwargs={'pool':pool}).start()
-    
-    pool_idle[pool] -= 1
+    pool = pool or deft_pool
+    poo = pool_sts.get(pool, None)
+    if poo is None or (poo.idle <= 0 and poo.num < pool.size):
+      if poo is None:
+        pool_sts[pool] = poo = PoolSt(pool)
+      poo.num += 1
+      poo.idle += 1
+      threading.Thread(target=worker_proc, kwargs={'pool_st':poo}).start()
+    poo.idle -= 1
     closure.jobs_notdone += 1
-    pool_jobs[pool].append((fut, job))
-    pool_cv[pool].notify()
+    poo.jobs.append((fut, job))
+    poo.cv.notify()
   
   def worker_proc(*args, **kwargs):
-    pool = kwargs['pool']
-    jobs = pool_jobs[pool]
-    cv = pool_cv[pool]
-    
+    poo = kwargs['pool_st']
+    if poo.ref_pool() is None: return
     lock.acquire()
     while True:
-      while len(jobs) > 0:
-        while len(jobs) > 0:
-          fut, job = jobs.popleft()
+      while len(poo.jobs) > 0:
+        while len(poo.jobs) > 0:
+          fut, job = poo.jobs.popleft()
           lock.release()
           try:
             ret = Result(job())
           except Exception, ex:
             ret = Raise(ex, sys.exc_traceback)
           lock.acquire()
-          pool_idle[pool] += 1
+          poo.idle += 1
           closure.jobs_notdone -= 1
           fut._finish(ret)
-          if len(wake_list) > 0 and len(jobs) > 0:
+          if len(wake_list) > 0 and len(poo.jobs) > 0:
             # tell the main thread it should do the awakening, we have more jobs to do
             cv_main.notify()
         # since we're out of jobs we might as well wake up some iterators
         awaken()
       if closure.quitting: break
-      cv.wait()
-    
-    pool_num[pool] -= 1
-    if pool_num[pool] == 0:
-      del pool_num[pool]
-    if len(pool_num) == 0:
-      cv_main.notify() # tell main all worker threads have exited
+      if poo.ref_pool() is None: break
+      poo.cv.wait()
     lock.release()
   
   class ItStat(object):
@@ -303,17 +300,15 @@ def run(a):
     
     if closure.jobs_notdone == 0:
       closure.quitting = True
-      for cv in pool_cv.itervalues():
-        cv.notify_all()
+      cv_main.notify()
+      for poo in pool_sts.values():
+        poo.cv.notify_all()
   
   lock.acquire()
   top = begin(None, a)
   while not closure.quitting:
     awaken()
     if closure.quitting: break
-    cv_main.wait()
-  
-  if len(pool_num) > 0: # not all worker threads have exited yet
     cv_main.wait()
   lock.release()
   return top.result()

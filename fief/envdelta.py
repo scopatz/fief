@@ -29,7 +29,7 @@ class EnvDelta(object):
     assert(set(me._set_adds).isdisjoint(that._sca_defs))
     assert all(
       me._sca_defs[k] == that._sca_defs[k]
-      for k in set(me._sca_defs) & set(that._sca_defs.keys()))
+      for k in set(me._sca_defs) & set(that._sca_defs))
     
     for k in that._set_adds:
       if k not in me._set_adds:
@@ -38,7 +38,8 @@ class EnvDelta(object):
     
     for k in that._sca_defs:
       me._sca_defs[k] = that._sca_defs[k]
-
+  
+  # this has to be wrong
   def apply(me, env):
     newenv = deepcopy(env)
     undo = eval(env.get(_undo_key, 'None').strip('"')) or EnvDelta()

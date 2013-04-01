@@ -27,11 +27,8 @@ class Package(object):
   def interfaces_a(me, oven):
     """returns dict ifc_name -> ifc (object)"""
     raise Exception('Not implemented.')
-  def realize(me, delivs):
-    """returns EnvDelta"""
-    raise Exception('Not implemented.')
   def builder(me):
-    """returns async function ctx,pkg_name,src_dir -> delivs"""
+    """returns async function ctx,pkg_name,src_dir ~> delivs"""
     raise Exception('Not implemented.')
 
 class PackageScript(Package):

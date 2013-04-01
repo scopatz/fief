@@ -20,10 +20,8 @@ def canonify_source(src):
 
 class Procurer(object):
   def __init__(me, stash_path):
-    me.maxlive = 8
+    me._pool = async.Pool(size=4)
     me._stash = stash_path
-    me._live = 0
-    me._bar = async.Barrier()
   
   def _download_a(me, url):
     """downloads url into the stash_path if it isn't there already.
@@ -38,6 +36,7 @@ class Procurer(object):
     _ensure_dirs(locf)
     
     if not os.path.exists(locf):
+      @async.assign_pool(me._pool)
       def task():
         try:
           def hook(nb, bsz, fsz):
@@ -57,12 +56,7 @@ class Procurer(object):
   def begin_a(me, src):
     """returns async lambda ctx ~> (path,cleanup)"""
     for x in canonify_source(src):
-      while me._live == me.maxlive:
-        yield async.Sync(me._bar)
-      me._live += 1
       got = yield async.Sync(_begin[x[0]](me, *x[1:]))
-      me._live -= 1
-      me._bar.fireone()
       if got is not None:
         yield async.Result(got)
     raise Exception("Failed to acquire source %r." % src)
