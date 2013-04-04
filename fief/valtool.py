@@ -1,7 +1,9 @@
-import array
+from array import array
 import binascii
+from collections import deque
 import hashlib
 import struct
+import sys
 
 class Hasher(object):
   def _make():
@@ -52,7 +54,7 @@ class Hasher(object):
     def f(h,s,x):
       h.update('array.%s.%x.' % (x.typecode, len(x)))
       h.update(x)
-    act[array.array] = f
+    act[array] = f
     
     def f(h,s,x):
       h.update('buffer.%x.' % len(x))
@@ -80,9 +82,26 @@ class Hasher(object):
       h.update('none.')
     act[type(None)] = f
     
-    return act
+    def act_unk(h,s,x):
+      ty = type(x)
+      if ty is getattr(sys.modules[ty.__module__], ty.__name__, None):
+        h.update('unk.%s.%s.' % (ty.__module__, ty.__name__))
+        if hasattr(x, '__getstate__'):
+          h.update('st.')
+          s.append(x.__getstate__())
+        else:
+          fs = getattr(ty,'__slots__',None) or x.__dict__.iterkeys()
+          fs = list(f for f in sorted(fs) if hasattr(x, f))
+          h.update('fs.%x.' % len(fs))
+          for f in fs:
+            s.append(f)
+            s.append(getattr(x, f))
+      else:
+        h.update('?')
+    
+    return lambda ty: act.get(ty, act_unk)
   
-  _act = _make()
+  _act = (_make(),) # hide it from class
   
   def __init__(me, that=None):
     if that is None:
@@ -97,11 +116,11 @@ class Hasher(object):
     return me
     
   def eat(me, x):
-    act = me._act
+    act = me._act[0]
     h = me._h
     s = [x] # stack of unprocessed values
     open_stk = []
-    open_num = array.array('i')
+    open_num = array('i')
     open_set = {}
     xc = 0
     while len(s) > 0:
@@ -110,23 +129,12 @@ class Hasher(object):
         h.update('cycle.%x.' % open_set[x])
         n = 0
       else:
-        x1 = x
-        while True:
-          t = type(x1)
-          a = act.get(t, None)
-          if a is not None:
-            n = len(s)
-            a(h,s,x1)
-            n = len(s) - n
-            break
-          else:
-            if hasattr(x1, '__getstate__'):
-              x1 = x1.__getstate__()
-            else:
-              h.update('?')
-              n = 0
-              break
-
+        t = type(x)
+        a = act(t)
+        n = len(s)
+        a(h,s,x)
+        n = len(s) - n
+      
       if n == 0:
         while True:
           if len(open_num) == 0:
@@ -153,290 +161,305 @@ class Hasher(object):
       me._dig = me._h.digest()
     return me._dig
 
-# opcodes:
-#  0: <pointer>
-#  1: im -> 0:None, 1:True, 2:False, 3-15: <wrap 1-13>
-#  2: buffer
-#  3: <backref>
-#  4: im -> 0:float, 1-15: integers 0-14
-#  5: int
-#  6: <unused>
-#  7: long
-#  8: -long
-#  9: list
-#  10: tuple
-#  11: dict
-#  12: set
-#  13: str
-#  14: array
-#  15: bytearray
 def _make():
-  c_act = {} # cata actions by type
-  a_act = {} # ana actions by opcode
+  cata_tbl = {} # maps types to catamorphism actions
+  ana_tbl = [] # maps leading bytes (opcodes) to anamorphism actions
+  # during _make, len(ana_tbl) represents the next free opcode
   
-  def putopim(op, im, b):
-    b.append(op + (im<<4))
+  identity = lambda x: x
   
-  def putref(op, n, b):
-    i = len(b)
-    b.append(0)
-    im = -1
+  def putnat(n, b):
     while True:
-      b.append(n & 0xff)
-      n = n >> 8
-      im += 1
+      c = n & 0x7f
+      n >>= 7
+      c = c | (0x80 if n != 0 else 0)
+      b.append(c)
       if n == 0: break
-    b[i] = op + (im<<4)
   
-  def takeref(im, b):
-    im += 1
-    return (sum(ord(b[i])<<(8*i) for i in xrange(im)), buffer(b,im))
-  
-  c_act[type(None)] = lambda cata, x, b: putopim(1, 0, b)
-  c_act[bool] = lambda cata, x, b: putopim(1, (1 if x else 2), b)
-  
-  def act(op, im, ana, b):
-    assert im < 3
-    return ((None,True,False)[im], b)
-  a_act[1] = act
-  
-  def make():
-    nb = struct.calcsize('<d')
-    def c_act(cata, x, b):
-      putopim(4, 0, b)
-      b[len(b):len(b)] = struct.pack('<d', x)
-    def a_act(op, im, ana, b):
-      if im == 0:
-        return (struct.unpack_from('<d', b)[0], buffer(b,nb))
-      else:
-        return (im-1, b)
-    return c_act, a_act
-  c_act[float], a_act[4] = make()
-  
-  ty_op = {buffer:2, list:9, tuple:10, dict:11, set:12, str:13, array.array:14, bytearray:15}
-  op_ty = dict((op,ty) for ty,op in ty_op.iteritems())
-  
-  def act(cata, x, b):
-    if 0 <= x and x < 15:
-      putopim(4, x+1, b)
-    else:
-      x -= 15 if x > 0 else 0
-      i = len(b)
-      b.append(0)
-      nb = 0
-      while True:
-        last = x & 0xff
-        b.append(last)
-        x = (x >> 8)
-        nb += 1
-        if x == 0 or x == -1:
-          break
-      if (x < 0) != ((last & 0x80) != 0):
-        b.append(x & 0xff)
-        nb += 1
-      b[i] = 5 + ((nb-1)<<4)
-  c_act[int] = act
-  
-  def act(op, im, ana, b):
-    x = 0
+  def takenat(b, p):
+    n = 0
     i = 0
-    while i < im+1:
-      last = ord(b[i])
-      x += last<<(8*i)
+    while True:
+      c = ord(b[p+i])
+      n += (c & 0x7f) << (7*i)
       i += 1
-    if (last & 0x80) != 0:
-      x -= 1<<(8*i)
-    else:
-      x += 15
-    return (int(x), buffer(b,im+1))
-  a_act[5] = act
+      if (c & 0x80) == 0: break
+    return n, p+i
   
-  def putlen(op, n, b):
-    i = len(b)
-    b.append(0)
-    nb = 0
-    while n != 0:
+  # None,True,False
+  def make():
+    op_n = len(ana_tbl)
+    op_t = op_n+1
+    op_f = op_n+2
+    mc = {None:op_n, True:op_t, False:op_f}
+    def cact(x, b, cata):
+      b.append(mc[x])
+    def aact(op, b, p, ana):
+      return (None, True, False)[op-op_n], p
+    cata_tbl[type(None)] = cact
+    cata_tbl[bool] = cact
+    ana_tbl.extend([aact]*3)
+  make()
+  
+  # int,long: distinction not preserved, 1L will be treated as int(1)
+  def make():
+    op0 = len(ana_tbl)
+    lb, ub = -16, 48
+    op_pos = op0 + ub-lb
+    op_neg = op0 + ub-lb + 1
+    def cact(x, b, cata):
+      if x < lb:
+        b.append(op_neg)
+        putnat(lb-1 - x, b)
+      elif ub <= x:
+        b.append(op_pos)
+        putnat(x - ub, b)
+      else:
+        b.append(op0 + x - lb)
+    def aact(op, b, p, ana):
+      if op < op_pos:
+        return op - op0 + lb, p
+      else:
+        n, p = takenat(b, p)
+        n = ub + n if op == op_pos else lb-1 - n
+        return n, p
+    cata_tbl[int] = cact
+    cata_tbl[long] = cact
+    ana_tbl.extend([aact]*66)
+  make()
+  
+  # string,bytearray,buffer
+  def make(ty,small):
+    op0 = len(ana_tbl)
+    def cact(x, b, cata):
+      if len(x) < small:
+        b.append(op0 + len(x))
+      else:
+        b.append(op0 + small)
+        putnat(len(x) - small, b)
+      b.extend(x)
+    def aact(op, b, p, ana):
+      op -= op0
+      if op < small:
+        n = op
+      else:
+        n, p = takenat(b, p)
+        n += small
+      return ty(buffer(b, p, n)), p + n
+    cata_tbl[ty] = cact
+    ana_tbl.extend([aact]*(small + 1))
+  make(str, 16)
+  make(bytearray, 0)
+  make(buffer, 0)
+  
+  # list,tuple,dict,set,frozenset,deque
+  def make(ty, items, small):
+    op0 = len(ana_tbl)
+    def cact(x, b, cata):
+      if len(x) < small:
+        b.append(op0 + len(x))
+      else:
+        b.append(op0 + small)
+        putnat(len(x) - small, b)
+      for x1 in items(x):
+        cata(x1)
+    def aact(op, b, p, ana):
+      op -= op0
+      if op < small:
+        n = op
+      else:
+        n, p = takenat(b, p)
+        n += small
+      xs = []
+      for i in xrange(n):
+        x, p = ana(b, p)
+        xs.append(x)
+      return (xs if ty is list else ty(xs)), p
+    cata_tbl[ty] = cact
+    ana_tbl.extend([aact]*(small + 1))
+  make(tuple, identity, 8)
+  make(list, identity, 4)
+  make(dict, lambda xs: sorted(xs.iteritems()), 4)
+  make(set, sorted, 4)
+  make(frozenset, sorted, 4)
+  make(deque, identity, 0)
+  
+  # array
+  def make():
+    op = len(ana_tbl)
+    def cact(x, b, cata):
+      b.append(op)
+      b.append(x.typecode)
+      putnat(len(x), b)
+      for x1 in x:
+        cata(x1)
+    def aact(op, b, p, ana):
+      tc = b[p]
+      n, p = takenat(b, p+1)
+      a = array(tc)
+      for i in xrange(n):
+        x1, p = ana(b, p)
+        a.append(x1)
+      return a, p
+    cata_tbl[array] = cact
+    ana_tbl.append(aact)
+  make()
+  
+  # unknown object
+  def make():
+    op_st = len(ana_tbl)
+    op_fs = len(ana_tbl) + 1
+    def cact(x, b, cata):
+      ty = type(x)
+      mod = ty.__module__
+      cls = ty.__name__
+      assert ty is getattr(sys.modules[mod], cls, None)
+      if hasattr(x, '__getstate__'):
+        b.append(op_st)
+        cata((mod,cls))
+        cata(x.__getstate__())
+      else:
+        b.append(op_fs)
+        fs = getattr(ty, '__slots__', None) or x.__dict__.iterkeys()
+        fs = tuple(f for f in sorted(fs) if hasattr(x, f))
+        cata((mod,cls) + fs)
+        for f in fs:
+          cata(getattr(x, f))
+    def aact(op, b, p, ana):
+      if op == op_st:
+        (mod, cls), p = ana(b, p)
+        x = getattr(sys.modules[mod], cls)()
+        st, p = ana(b, p)
+        x.__setstate__(st)
+      else:
+        tup, p = ana(b, p)
+        mod, cls, flds = tup[0], tup[1], tup[2:]
+        x = getattr(sys.modules[mod], cls)()
+        for f in flds:
+          val, p = ana(b, p)
+          setattr(x, f, val)
+      return x, p
+    # cata_tbl has no entries because type is unknown
+    ana_tbl.extend([aact]*2)
+    return cact
+  unk_cact = make()
+  
+  ref_aact = object()
+  ref_op0 = len(ana_tbl)
+  ana_tbl.extend(ref_aact for i in xrange(65))
+  
+  def putref(n, b):
+    nbyt = 0
+    while nbyt < 4 and n >= (1<<(5-nbyt + 8*nbyt)):
+      nbyt += 1
+    byt0 = ((1<<nbyt)-1)<<(6-nbyt)
+    byt0 += n & (1<<(5-nbyt))-1
+    n >>= 5-nbyt
+    b.append(ref_op0 + byt0)
+    while nbyt > 0:
       b.append(n & 0xff)
-      n = (n >> 8)
-      nb += 1
-    b[i] = op + (nb<<4)
+      n >>= 8
+      nbyt -= 1
   
-  def takelen(op, im, b):
-    return (sum(ord(b[i])<<(8*i) for i in xrange(im)), buffer(b,im))
+  def takeref(op, b, p):
+    byt0 = op - ref_op0
+    nbyt = 0
+    while byt0 & (1<<(5-nbyt)) != 0:
+      nbyt += 1
+    sh = 5-nbyt
+    n = byt0 & (1<<sh)-1
+    i = 0
+    while i < nbyt:
+      n += b[p+i]<<sh
+      sh += 8
+      i += 1
+    return n, p+i
   
-  def act(cata, x, b):
-    op = 7 + (1 if x < 0 else 0)
-    x = bytearray(hex(abs(x)))
-    n = len(x) - 2 - (1 if x[-1] == ord('L') else 0)
-    if (n & 1) == 1:
-      x[1] = ord('0')
-      x = buffer(x, 1, n+1)
-    else:
-      x = buffer(x, 2, n)
-    x = binascii.unhexlify(x)
-    putlen(op, len(x), b)
-    b.extend(x)
-  c_act[long] = act
+  wrap_aact = object()
+  wrap_op0 = len(ana_tbl)
+  ana_tbl.extend([wrap_aact]*4)
   
-  def act(op, im, ana, b):
-    n, b = takelen(op, im, b)
-    x = binascii.hexlify(buffer(b,0,n))
-    x = eval("0x" + x)
-    x *= -1 if op==8 else 1
-    return (x, buffer(b,n))
-  a_act[7] = act
-  a_act[8] = act
+  ptr_aact = object()
+  ptr_op = len(ana_tbl)
+  ana_tbl.append(ptr_aact)
   
-  def act(cata, x, b):
-    putlen(11, len(x), b)
-    for k,v in sorted(x.iteritems()):
-      cata(k)
-      cata(v)
-  c_act[dict] = act
+  assert len(ana_tbl) < 256
+  #print 'OPCODES:', len(ana_tbl)
   
-  def act(op, im, ana, b):
-    n, b = takelen(op, im, b)
-    d = {}
-    for i in xrange(n):
-      k, b = ana(b)
-      v, b = ana(b)
-      d[k] = v
-    return (d, b)
-  a_act[ty_op[dict]] = act
-  
-  def act(cata, x, b):
-    putlen(ty_op[type(x)], len(x), b)
-    b.extend(x)
-  c_act[buffer] = act
-  c_act[str] = act
-  c_act[bytearray] = act
-  
-  def act(op, im, ana, b):
-    n, b = takelen(op, im, b)
-    return (op_ty[op](buffer(b,0,n)), buffer(b,n))
-  a_act[ty_op[buffer]] = act
-  a_act[ty_op[str]] = act
-  a_act[ty_op[bytearray]] = act
-  
-  def act(cata, x, b):
-    putlen(14, len(x), b)
-    b.append(x.typecode)
-    b.extend(buffer(x))
-  c_act[array.array] = act
-  
-  def act(op, im, ana, b):
-    n, b = takelen(op, im, b)
-    a = array.array(b[0])
-    nb = n*a.itemsize
-    a.fromstring(buffer(b,1,nb))
-    return (a, buffer(b,nb+1))
-  a_act[ty_op[array.array]] = act
-  
-  def act(cata, x, b):
-    putlen(ty_op[type(x)], len(x), b)
-    for x1 in x:
-      cata(x1)
-  c_act[list] = act
-  c_act[tuple] = act
+  def make():
+    never = lambda x: False
+    always = lambda x: True
 
-  def act(op, im, ana, b):
-    n, b = takelen(op, im, b)
-    xs = []
-    for i in xrange(n):
-      x, b = ana(b)
-      xs.append(x)
-    return (op_ty[op](xs), b)
-  a_act[ty_op[list]] = act
-  a_act[ty_op[tuple]] = act
-  
-  def act(cata, x, b):
-    putlen(ty_op[type(x)], len(x), b)
-    for x1 in sorted(x):
-      cata(x1)
-  c_act[set] = act  
-  
-  def act(op, im, ana, b):
-    n, b = takelen(op, im, b)
-    xs = set()
-    for i in xrange(n):
-      x, b = ana(b)
-      xs.add(x)
-    return (xs, b)
-  a_act[ty_op[set]] = act
-  
-  def make():
     ty_m = {}
-    ty_m[long] = lambda x: True
+    ty_m[type(None)] = never
+    ty_m[bool] = never
+    ty_m[int] = never
+    ty_m[long] = always
+    
     test = lambda x: len(x) > 2
     for ty in (str,buffer,bytearray):
       ty_m[ty] = test
+    
     test = lambda x: len(x) > 0
-    for ty in (array.array,list,tuple,dict,set):
+    for ty in (array,list,tuple,dict,set,frozenset):
       ty_m[ty] = test
-    never = lambda x:False
-    return lambda x: ty_m.get(type(x), never)(x)
-  is_memoizeable = make()
-  
-  def make():
-    ty_m = {}
-    ty_m[long] = lambda x: True
-    test = lambda x: len(x) > 2
-    for ty in (str,buffer,bytearray):
-      ty_m[ty] = test
-    test = lambda x: len(x) > 0
-    for ty in (array.array,list,tuple,dict,set):
-      ty_m[ty] = test
-    def was_memoized(op, im, x):
-      return op == 0 or \
-        (op == 1 and im > 2) or \
-        (op != 3 and ty_m.get(type(x), lambda x:False)(x))
-    return was_memoized
-  was_memoized = make()
+    
+    def is_memoed(x):
+      return ty_m.get(type(x), always)(x)
+    
+    def was_memoed(op, x):
+      if ref_op0 <= op and op < ref_op0+64: return False
+      if op == ptr_op: return True
+      return ty_m.get(type(x), always)(x)
+    
+    return is_memoed, was_memoed
+  is_memoed, was_memoed = make()
   
   def pack(x, control=None):
-    if control is None:
-      control = lambda x, cata, ptr, wrap: cata(x)
-    
     b = bytearray()
     memo_ix = {} # md5 -> ix
     memo_id = [] # ix -> md5
     class box:
       h = hashlib.md5()
       hlen = 0
-    
+
     def reset(st):
       off, mems = st
       del b[off:]
       for i in xrange(mems, len(memo_id)):
         del memo_ix[memo_id[i]]
       del memo_id[mems:]
-    
-    def putx(x, st):
+
+    def putx(x, cata, st):
       reset(st)
-      box.h = hashlib.md5() if is_memoizeable(x) else None
+      box.h = hashlib.md5() if is_memoed(x) else None
       box.hlen = len(b)
-      c_act[type(x)](cata, x, b)
-      return len(b)-st[0] # len(b[st[0]:])
-      #return buffer(b,st[0])
+      cata_tbl.get(type(x), unk_cact)(x, b, cata)
+      return len(b)-st[0]
     
-    def putptr(x, n, st):
-      reset(st)
-      box.h = hashlib.md5()
-      box.hlen = len(b)
-      putref(0, n, b)
-      #return buffer(b,st[0])
-    
-    def putwrap(x, comps, st):
-      assert 1 <= len(comps) and len(comps) <= 13
+    def putptr(n, st):
       reset(st)
       box.h = hashlib.md5()
       box.hlen = len(b)
-      b.append(1 + ((2+len(comps))<<4))
+      b.append(ptr_op)
+      putnat(n, b)
+    
+    def putwrap(ctrl, comps, st):
+      assert 1 <= len(comps) and len(comps) <= 4
+      reset(st)
+      box.h = hashlib.md5()
+      box.hlen = len(b)
+      b.append(wrap_op0 + len(comps)-1)
       for c in comps:
-        cata(c)
-      #return buffer(b,st[0])
+        cata(c, ctrl)
     
-    def cata(x):
+    def deft_control(x, cata, ptr, wrap):
+      return cata(x, deft_control)
+    
+    def cata(x, control=None):
+      if control is None:
+        control = deft_control
+      
       h0 = box.h
       if h0 is not None:
         h0.update(buffer(b, box.hlen))
@@ -444,7 +467,13 @@ def _make():
       
       box.h = None
       st = (len(b), len(memo_ix))
-      control(x, lambda x:putx(x,st), lambda n:putptr(x,n,st), lambda *comps:putwrap(x,comps,st))
+      
+      control(
+        x,
+        lambda x,ctrl=None: putx(x, lambda x: cata(x,ctrl), st),
+        lambda n: putptr(n, st),
+        lambda ctrl,*comps: putwrap(ctrl, comps, st)
+      )
       
       h = box.h
       if h is not None:
@@ -452,7 +481,7 @@ def _make():
         dig = h.digest()
         if dig in memo_ix:
           reset(st)
-          putref(3, memo_ix[dig], b)
+          putref(memo_ix[dig], b)
         else:
           memo_ix[dig] = len(memo_id)
           memo_id.append(dig)
@@ -463,37 +492,68 @@ def _make():
       box.h = h0
       box.hlen = len(b)
     
-    cata(x)
+    cata(x, control)
     return b
   
   def unpack(b, getptr=None, unwrap=None):
     memo = []
-    def ana(b):
-      c = ord(b[0])
-      op = c & 0xf
-      im = c >> 4
-      b = buffer(b,1)
-      if op == 0:
-        n, b = takeref(im, b)
+    def ana(b, p):
+      op = ord(b[p])
+      p += 1
+      act = ana_tbl[op]
+      if act is ptr_aact:
+        n, p = takenat(b, p)
         ans = getptr(n)
-      elif op == 1 and im > 2:
+      elif act is wrap_aact:
         comps = []
-        for i in xrange(im-2):
-          x, b = ana(b)
+        for i in xrange(op-wrap_op0+1):
+          x, p = ana(b, p)
           comps.append(x)
         ans = unwrap(*comps)
-      elif op == 3:
-        n, b = takeref(im, b)        
+      elif act is ref_aact:
+        n, p = takeref(op, b, p)
         ans = memo[n]
       else:
-        ans, b = a_act[op](op, im, ana, b)
+        ans, p = act(op, b, p, ana)
       
-      if was_memoized(op, im, ans):
+      if was_memoed(op, ans):
         memo.append(ans)
-      return (ans, b)
+      return ans, p
     
-    return ana(buffer(b))[0]
+    return ana(buffer(b), 0)[0]
   
-  return (pack, unpack)
+  return pack, unpack
 
 pack, unpack = _make()
+
+if False: # test
+  x = {
+    (1,2): "hello",
+    (-1,1<<31): bytearray('ba'),
+    "": frozenset([9,8,2]),
+    None: array('i',range(4))
+  }  
+  print unpack(pack(x))
+  print 'equal:', x == unpack(pack(x))
+  
+  class Class1(object):
+    def __init__(me,x):
+      me.a = x
+      me.hello = 'world'
+      me.hell = 666
+  class Class2(object):
+    __slots__ = ('__a', 'b')
+    def __init__(me):
+      me.__a = 5
+  class Class3(object):
+    def __getstate__(me):
+      return frozenset('yay')
+    def __setstate__(me, x):
+      assert x == frozenset('yay')
+  
+  print pack((Class1('ONE'),Class1('TWO')))
+  
+  x = unpack(pack(Class2()))
+  print x._Class2__a, hasattr(x,'b')
+  
+  x = unpack(pack(Class3()))

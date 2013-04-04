@@ -34,7 +34,7 @@ class Fief(object):
     me._path_stash = conf['stash']
     me._deft_ifcs = conf.get('interfaces', frozenset())
     me._prefs = conf.get('preferences', {})
-    me._opts = conf.get('options', lambda x,y: (None, False))
+    me._opts = conf.get('options', lambda pkg,x: (None, False))
     me._pkgs = conf.get('packages', {})
     
     me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
@@ -42,3 +42,6 @@ class Fief(object):
     me.repo = yield async.Sync(repository.Repo.new_a(me.oven, me._pkgs))
     
     yield async.Result(me)
+  
+  def option(me, pkg, x):
+    return me._opts.get((pkg, x))
