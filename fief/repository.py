@@ -1,10 +1,9 @@
 import os
 
-import bake
 import async
+import envdelta
 
-#ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
-ensure_frozenset = lambda x: set(x if hasattr(x, '__iter__') else (x,))
+ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
 
 class ifc(object):
   def __init__(me, subsumes=(), requires=()):
@@ -27,8 +26,11 @@ class Package(object):
   def interfaces_a(me, oven):
     """returns dict ifc_name -> ifc (object)"""
     raise Exception('Not implemented.')
+  def deliverable(me, what, built):
+    """returns deliverable named 'what' from result of build"""
+    raise Exception('Not implemented.')
   def builder(me):
-    """returns async function ctx,pkg_name,src_dir ~> delivs"""
+    """returns async function ctx,pkg_name,src_dir,opts ~> delivs"""
     raise Exception('Not implemented.')
 
 class PackageScript(Package):
@@ -42,25 +44,13 @@ class PackageScript(Package):
     return me._src
 
   def interfaces_a(me, oven):
-    def pack_ifx(ifx):
-      return dict((nm,x.__getstate__()) for nm,x in ifx.iteritems())
-    
-    def unpack_ifx(s):
-      def unpack(t):
-        i = ifc()
-        i.__setstate__(t)
-        return i
-      return dict((nm,unpack(x)) for nm,x in s.iteritems())
-
-    def packed_ifx_a(ctx):
+    def load_ifx_a(ctx):
       ns = {}
       execfile(ctx['py'], ns, ns)
-      yield async.Result(pack_ifx(ns['interfaces']))
-
-    if me._ifx is None:
-      me._ifx = yield async.Sync(oven.memo_a(packed_ifx, {'py':me._py}))
-      me._ifx = unpack_ifx(me._ifx)
+      yield async.Result(ns['interfaces'])
     
+    if me._ifx is None:
+      me._ifx = yield async.Sync(oven.memo_a(load_ifx_a, {'py':me._py}))
     yield async.Result(me._ifx)
   
   def _ensure_ns(me):
@@ -68,10 +58,10 @@ class PackageScript(Package):
       me._ns = {}
       execfile(me._py, me._ns, me._ns)
 
-  def realize(me, delivs):
+  def deliverable(me, what, built):
     me._ensure_ns()
-    return me._ns['realize'](delivs)
-
+    return me._ns.get('deliverable_' + what, lambda _:None)(built)
+  
   def builder(me):
     me._ensure_ns()
     return me._ns['build_a']
@@ -97,7 +87,7 @@ class Repo(object):
           ifc_subs[ifc] = set([ifc])
         ifc_subs[ifc].update(ifx[ifc].subsumes)
         
-        pkg_ifc_reqs[pkg,ifc] = ifx[ifc].requires
+        pkg_ifc_reqs[pkg,ifc] = set(ifx[ifc].requires)
     
     for ifc in ifcs:
       if ifc not in ifc_subs:

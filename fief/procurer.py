@@ -1,11 +1,24 @@
+from base64 import urlsafe_b64encode
+from hashlib import md5
 import os
+import re
 import sys
 import shutil
+import tempfile
+import urllib
 
 import async
+import bake
+
+def _ensure_dirs(path):
+  d = os.path.split(path)[0]
+  if not os.path.exists(d):
+    os.makedirs(d)
 
 def canonify_source(src):
-  if isinstance(src, basestring):
+  if src is None:
+    return []
+  elif isinstance(src, basestring):
     if re.match('(https?|s?ftp)://', src) is not None:
       return [('url','tarball',src)]
     else:
@@ -30,7 +43,7 @@ class Procurer(object):
     def localize(url):
       name = os.path.split(url)[-1]
       h = urlsafe_b64encode(md5(url).digest())
-      return os.path.join(me._stash, name + '-' + h)
+      return os.path.join(me._stash, h + '-' + name)
     
     locf = localize(url)
     _ensure_dirs(locf)
@@ -55,11 +68,18 @@ class Procurer(object):
   
   def begin_a(me, src):
     """returns async lambda ctx ~> (path,cleanup)"""
-    for x in canonify_source(src):
+    src = canonify_source(src)
+    for x in src:
       got = yield async.Sync(_begin[x[0]](me, *x[1:]))
       if got is not None:
         yield async.Result(got)
-    raise Exception("Failed to acquire source %r." % src)
+
+    if len(src) > 0:
+      raise Exception("Failed to acquire source %r." % src)
+    else:
+      def rest_a(ctx):
+        yield async.Result((None, lambda:None))
+      yield async.Result(rest_a)
 
 _begin = {} # a begin method asynchronously returns either ctx~>(path,cleanup) or None
 
@@ -92,8 +112,11 @@ def _begin_tarball_a(me, path):
     c.cwd = tmpd
     c.tag = ctx['pkg']
     if os.name == 'nt':
-      path = path.split(':',1)[1]
-    c.lit(lits).inf(path)
+      path1 = path.split(':',1)[1]
+    else:
+      path1 = path
+    path1 = os.path.abspath(path1)
+    c.lit(lits).inf(path1)
     yield async.Sync(c.exec_a())
     
     ls = os.listdir(tmpd)

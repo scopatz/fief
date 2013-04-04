@@ -1,10 +1,7 @@
 from fief import async
-from fief.repo import ifc
+from fief.repository import ifc
 
 interfaces = {'cc': ifc()}
 
-def realize(delivs):
-    return {}
-
-def build_a(ctx):
-    yield async.Result({})
+def build_a(ctx, pkg, path, opts):
+  yield async.Result(None)

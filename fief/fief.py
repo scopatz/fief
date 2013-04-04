@@ -4,8 +4,14 @@ import shutil
 
 import async
 import bake
-import respository
+import envdelta
 import procurer
+import repository
+
+Cmd = bake.Cmd
+EnvDelta = envdelta.EnvDelta
+ifc = repository.ifc
+PackageScript = repository.PackageScript
 
 def default_conf_path():
   path = os.getcwd()
@@ -20,7 +26,7 @@ def default_conf_path():
         return p
     if path == root:
       break
-    path = os.path.split(path)
+    path = os.path.split(path)[0]
   
   return None
 
@@ -34,7 +40,7 @@ class Fief(object):
     me._path_stash = conf['stash']
     me._deft_ifcs = conf.get('interfaces', frozenset())
     me._prefs = conf.get('preferences', {})
-    me._opts = conf.get('options', lambda pkg,x: (None, False))
+    me._opts = conf.get('options', lambda pkg,x: None)
     me._pkgs = conf.get('packages', {})
     
     me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
@@ -42,6 +48,9 @@ class Fief(object):
     me.repo = yield async.Sync(repository.Repo.new_a(me.oven, me._pkgs))
     
     yield async.Result(me)
+  
+  def preferred_package(me, ifc):
+    return me._prefs.get(ifc, None)
   
   def option(me, pkg, x):
     return me._opts.get((pkg, x))

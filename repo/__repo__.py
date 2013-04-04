@@ -1,3 +1,5 @@
+from fief.repository import PackageScript
+
 packages = {
   'sys_cc': (None, 'sys_cc.py'),
   'sys_py': (None, 'sys_py.py'),
@@ -13,3 +15,14 @@ packages = {
   'zlib': ('http://zlib.net/zlib-1.2.7.tar.gz', 'zlib.py'),
   'cmake': ('http://www.cmake.org/files/v2.8/cmake-2.8.10.2.tar.gz', 'cmake.py'),
   }
+
+stash = ".fief-stash"
+
+def path(p):
+  return 'repo/' + p
+  
+packages = {
+  'sys_cc': PackageScript(None, path('sys_cc.py')),
+  'sys_py': PackageScript(None, path('sys_py.py')),
+  'zlib': PackageScript('http://zlib.net/zlib-1.2.7.tar.gz', path('zlib.py')),
+}

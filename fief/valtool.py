@@ -62,11 +62,8 @@ class Hasher(object):
     act[buffer] = f
     
     def f(h,s,x):
-      h.update('int.%x.' % x)
+      h.update('int.%x.' % long(x))
     act[int] = f
-    
-    def f(h,s,x):
-      h.update('long.%x.' % x)
     act[long] = f
     
     def f(h,s,x):
@@ -90,7 +87,7 @@ class Hasher(object):
           h.update('st.')
           s.append(x.__getstate__())
         else:
-          fs = getattr(ty,'__slots__',None) or x.__dict__.iterkeys()
+          fs = getattr(ty,'__slots__',None) or getattr(x,'__dict__',{}).iterkeys()
           fs = list(f for f in sorted(fs) if hasattr(x, f))
           h.update('fs.%x.' % len(fs))
           for f in fs:
@@ -125,15 +122,18 @@ class Hasher(object):
     xc = 0
     while len(s) > 0:
       x = s.pop()
-      if id(x) in open_set:
-        h.update('cycle.%x.' % open_set[x])
-        n = 0
+      if not getattr(x, '__valtool_ignore__', False):
+        if id(x) in open_set:
+          h.update('cycle.%x.' % open_set[x])
+          n = 0
+        else:
+          t = type(x)
+          a = act(t)
+          n = len(s)
+          a(h,s,x)
+          n = len(s) - n
       else:
-        t = type(x)
-        a = act(t)
-        n = len(s)
-        a(h,s,x)
-        n = len(s) - n
+        n = 0
       
       if n == 0:
         while True:
@@ -320,7 +320,7 @@ def _make():
         cata(x.__getstate__())
       else:
         b.append(op_fs)
-        fs = getattr(ty, '__slots__', None) or x.__dict__.iterkeys()
+        fs = getattr(ty, '__slots__', None) or getattr(x,'__dict__',{}).iterkeys()
         fs = tuple(f for f in sorted(fs) if hasattr(x, f))
         cata((mod,cls) + fs)
         for f in fs:
@@ -457,6 +457,8 @@ def _make():
       return cata(x, deft_control)
     
     def cata(x, control=None):
+      assert not getattr(x, '__valtool_ignore__', False)
+      
       if control is None:
         control = deft_control
       

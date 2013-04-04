@@ -3,7 +3,6 @@ def solve(repo, ifcs):
   """Returns an iterable of dicts that map interfaces to packages.
   Each dict will be complete with all dependencies and subsumed interfaces."""
   
-  print repo.pkg_ifc_reqs('hdf5','hdf5-parallel')
   # solver state
   part = DisjointSets() # equivalence partition for interface subsumption
   world = set(repo.ifcs_subs(ifcs)) # interfaces seen so far

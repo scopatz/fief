@@ -19,7 +19,7 @@ def _assert_insts(*pairs):
     if not isinstance(x, y):
       print 'x:', x, ', y:', y
       assert False
-    
+
 def _ensure_dirs(path):
   d = os.path.split(path)[0]
   if not os.path.exists(d):
@@ -44,14 +44,17 @@ def _flatten(x):
     yield x
 
 class Cmd(object):
-  def __init__(me, ctx):
+  def __init__(me, ctx, cwd=None, env=None, executable=None, tag=None, 
+               showout=False, showerr=True):
     me._ctx = ctx
     me._toks = []
     me._oxs = {}
-    me.cwd = None
-    me.showout = False
-    me.showerr = True
-    me.env = {}
+    me.cwd = cwd
+    me.env = env or {}
+    me.executable = executable # if os.name == 'nt' else None
+    me.tag = tag
+    me.showout = showout
+    me.showerr = showerr
   
   def lit(me, *toks):
     me._toks += _flatten(toks)
@@ -93,14 +96,22 @@ class Cmd(object):
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
     
+    if me.tag is not None:
+      tag = ' ' + me.tag + '] '
+    else:
+      tag = '] '
+    
     if me.showerr:
-      print >> sys.stderr, '[RUN] ' + me.shline
+      print >> sys.stderr, '[RUN' + tag + me.shline
     yield async.Sync(go)
     
     if me.showerr and me.stderr != '':
-      print >> sys.stderr, '-'*72 + '\n[ERR] ' + me.shline + '\n' + me.stderr + ('' if me.stderr[-1] == '\n' else '\n') + '-'*72
+      print >> sys.stderr, '-'*72 + '\n[MSG' + tag + me.shline + '\n' + \
+        me.stderr + ('' if me.stderr[-1] == '\n' else '\n') + '-'*72
+    
     if me.showout and me.stdout != '':
-      print >> sys.stderr, '-'*72 + '\n[OUT] ' + me.shline + '\n' + me.stdout + ('' if me.stdout[-1] == '\n' else '\n') + '-'*72
+      print >> sys.stderr, '-'*72 + '\n[OUT' + tag + me.shline + '\n' + \
+        me.stdout + ('' if me.stdout[-1] == '\n' else '\n') + '-'*72
     
     if me.returncode != 0:
       raise subprocess.CalledProcessError(me.returncode, me.shline)

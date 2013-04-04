@@ -5,19 +5,21 @@ import shutil
 import subprocess
 
 import async
-import bake
 import fief
-import procure
-import repository
-ifc = respository.ifc
+import solve
 
-def deliver_a(me, fief, ifcs):
+def deliver_a(fief, ifcs):
+  """ returns (ifc2pkg, pkg2built) where:
+    ifc2pkg: dict that maps interfaces to chosen packages
+    pkg2built: dict that maps package to built value
+  """
+  
   oven = fief.oven
   repo = fief.repo
   procurer = fief.procurer
   
   def less(ifc, a, b):
-    return a == conf.preferences.get(ifc)
+    return a == fief.preferred_package(ifc)
   
   def compare_soln(a, b):
     a_less, b_less = False, False
@@ -35,18 +37,15 @@ def deliver_a(me, fief, ifcs):
     return 0
   
   least = []
-  for a in repo.solve_pkgs(ifcs):
-    add_a = False
+  for a in solve.solve(repo, ifcs):
+    dont_add = False
     for b in list(least):
       c = compare_soln(a, b)
       if c < 0:
-        add_a = True
         least.remove(b)
-      elif c == 0:
-        add_a = True
-      else:
-        assert not add_a
-    if add_a:
+      elif c > 0:
+        dont_add = True
+    if not dont_add:
       least.append(a)
   
   if len(least) > 1:
@@ -84,58 +83,66 @@ def deliver_a(me, fief, ifcs):
   # begin procuring and building
   pkg2fut = {}
   fut2pkg = {}
-  bar = async.Future()
+  barrier = async.Future()
   
   def procure_and_build_a(pkg):
-    src = repo.package(pkg).source()
+    pobj = repo.package(pkg)
+    src = pobj.source()
     rest = yield async.Sync(procurer.begin_a(src))
     
     # stall until all futures are created
-    yield async.Wait(bar)
+    yield async.Wait(barrier)
     
     # wait for all dependencies to build
-    dep_delvs = {}
+    dep_built = {}
     for dep in pkg_deps.get(pkg, ()):
-      dep_delvs[dep] = yield async.Wait(pkg2fut[dep])
+      dep_built[dep] = yield async.Wait(pkg2fut[dep])
     
     # time to build
     def args(x):
-      if type(x) is tuple and len(x)==2:
+      if x == 'pkg':
+        return pkg
+      elif type(x) is tuple and len(x)==2:
         if x[0]=='interface':
           return soln.get(x[1])
         elif x[0]=='option':
-          return conf.option(pkg, x[1])
+          return fief.option(pkg, x[1])
         else:
           return None
       elif type(x) is tuple and len(x)==3:
         if x[0]=='deliverable':
-          return dep_delvs.get(x[2],{}).get(x[1])
+          return repo.package(x[2]).deliverable(x[1], dep_built[x[2]])
         else:
           return None
       else:
         return None
     
+    builder_a = repo.package(pkg).builder()
+    opts = lambda x: fief.option(pkg, x)
+    opts.__valtool_ignore__ = True
+    
     def build_a(ctx):
       path, cleanup = yield async.Sync(rest(ctx))
       try:
-        b = repo.package(pkg).builder()
-        delvs = yield async.Sync(b(ctx, pkg, path))
+        delvs = yield async.Sync(builder_a(ctx, pkg, path, opts))
       finally:
         cleanup()
       yield async.Result(delvs)
     
-    delvs = yield async.Sync(oven.memo_a(bld_a, args))
-    yield async.Result(delvs)
+    built = yield async.Sync(oven.memo_a(build_a, args))
+    yield async.Result(built)
   
   # launch each package
   for pkg in pkg_list:
     fut = yield async.Begin(procure_and_build_a(pkg))
     fut2pkg[fut] = pkg
     pkg2fut[pkg] = fut
-  bar.finish() # done creating futures
+  barrier.finish() # done creating futures
   
   # wait for all packages
   for f in fut2pkg:
     yield async.Wait(f)
   
-  yield async.Result(dict((pkg,fut.result()) for pkg,fut in pkg2fut.items()))
+  yield async.Result((soln, dict(
+    (pkg, fut.result()) for pkg,fut in pkg2fut.items()
+  )))
