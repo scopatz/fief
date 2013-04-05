@@ -1,14 +1,11 @@
 import os
 from glob import glob
-
-from fief import conf
-from fief import repo
-from fief.repo import ifc, async, bake
+from fief import ifc, async, bake
 
 interfaces = {'sympy': ifc(requires='py'), 
               'sympy-cython': ifc(subsumes='sympy', requires='cython')}
 
-realize = repo.py_realize
+#realize = repo.py_realize
 
 def build_a(ctx):
     pkg = ctx['pkg']

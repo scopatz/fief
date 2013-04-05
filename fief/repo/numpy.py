@@ -1,8 +1,7 @@
 import os
-from fief import repo
-from fief.repo import ifc, async, bake
+from fief import ifc, async, bake
 
-interfaces = {'numpy': ifc(requires=('atlas', 'py')}
+interfaces = {'numpy': ifc(requires=('atlas', 'py'))}
 
 def build_a(ctx):
     pkg = ctx['pkg']
