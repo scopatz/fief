@@ -103,7 +103,9 @@ def deliver_a(fief, ifcs):
       if x == 'pkg':
         return pkg
       elif type(x) is tuple and len(x)==2:
-        if x[0]=='implementor':
+        if x[0]=='env':
+          return os.environ.get(x[1])
+        elif x[0]=='implementor':
           return soln.get(x[1])
         elif x[0]=='option':
           return fief.option(pkg, x[1])

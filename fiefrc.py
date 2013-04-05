@@ -25,6 +25,9 @@ def P(p):
   return os.path.join(os.path.split(__file__)[0], 'repo', p)
 
 packages = {
+  'hdf5': PackageScript(
+    'http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2',
+    P('hdf5.py')),
   'sys_cc': PackageScript(None, P('sys_cc.py')),
   'sys_py': PackageScript(None, P('sys_py.py')),
   'zlib': PackageScript('http://zlib.net/zlib-1.2.7.tar.gz', P('zlib.py')),

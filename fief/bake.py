@@ -90,9 +90,7 @@ class Cmd(object):
     
     def go():
       pipe = subprocess.PIPE
-      env = dict(os.environ)
-      env.update(me.env)
-      p = subprocess.Popen(me._toks, cwd=me.cwd, env=env, stdin=pipe, stdout=pipe, stderr=pipe)
+      p = subprocess.Popen(me._toks, cwd=me.cwd, env=me.env, stdin=pipe, stdout=pipe, stderr=pipe)
       me.stdout, me.stderr = p.communicate()
       me.returncode = p.returncode
     

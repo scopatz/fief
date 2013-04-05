@@ -45,8 +45,10 @@ class PackageScript(Package):
 
   def interfaces_a(me, oven):
     def load_ifx_a(ctx):
+      py = ctx['py']
+      ctx.input(py)
       ns = {}
-      execfile(ctx['py'], ns, ns)
+      execfile(py, ns, ns)
       yield async.Result(ns['interfaces'])
     
     if me._ifx is None:
@@ -88,6 +90,9 @@ class Repo(object):
         ifc_subs[ifc].update(ifx[ifc].subsumes)
         
         pkg_ifc_reqs[pkg,ifc] = set(ifx[ifc].requires)
+        
+        ifcs.update(ifc_subs[ifc])
+        ifcs.update(pkg_ifc_reqs[pkg,ifc])
     
     for ifc in ifcs:
       if ifc not in ifc_subs:
@@ -106,18 +111,20 @@ class Repo(object):
     # if a subsumes b, then anyone who implements a also implements b
     for a in ifc_subs:
       for b in ifc_subs[a]:
-        ifc_imps[b].update(ifc_imps[a])
+        if b not in ifc_imps:
+          ifc_imps[b] = set()
+        ifc_imps[b].update(ifc_imps.get(a, ()))
     
     # to require an interface a is to also require all the interfaces it subsumes
     for (pkg,ifc),reqs in pkg_ifc_reqs.iteritems():
       for req in tuple(reqs):
-        reqs.update(ifc_subs[req])
+        reqs.update(ifc_subs.get(req, ()))
       assert ifc not in reqs
     
     # requirements subsume
     for (pkg,a),reqs in pkg_ifc_reqs.iteritems():
       for b in ifc_subs[a]:
-        reqs.update(pkg_ifc_reqs.get((pkg,b), frozenset()))
+        reqs.update(pkg_ifc_reqs.get((pkg,b), ()))
     
     me = cls()
     me._pkgs = dict(pkgs)

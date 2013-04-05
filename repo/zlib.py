@@ -44,7 +44,7 @@ def build_a(ctx, pkg, path, opts):
     yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
-    c.lit('make')
+    c.lit('make','-j')
     yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
