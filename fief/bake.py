@@ -261,10 +261,20 @@ class Oven(object):
       return got
     
     n = yield async.Sync(me._dbjob(bump))
-    o = os.path.join(me._path, 'o', path, str(n))
-    assert not os.path.exists(o)
-    _ensure_dirs(o)
-    yield async.Result(o)
+    opath = os.path.join(me._path, 'o', path, str(n))
+    assert not os.path.exists(opath)
+    _ensure_dirs(opath)
+    yield async.Result((opath,(path,n)))
+  
+  def _kill_outfiles(me, outfs):
+    for o in outfs:
+      pass
+    assert False
+    
+  def _is_outfile(me, path):
+    o = os.path.join(os.path.realpath(me._path), 'o')
+    p = os.path.realpath(path)
+    return p.startswith(o + os.path.sep) # ugly, should use os.path.samefile
   
   def _memo_a(me, par, fun_a, argmap):
     def calc_a(log):
@@ -383,14 +393,12 @@ class _Context(_View):
     return key
   
   def _is_outfile(me, path):
-    o = os.path.join(os.path.realpath(me._oven._path), 'o')
-    p = os.path.realpath(path)
-    return p.startswith(o + os.path.sep) # ugly, should use os.path.samefile
+    return me._oven._is_outfile(path)
   
   def outfile_a(me, path):
-    o = yield async.Sync(me._oven._outfile_a(path))
+    opath, o = yield async.Sync(me._oven._outfile_a(path))
     me._outfs.append(o)
-    yield async.Result(o)
+    yield async.Result(opath)
   
   def __getitem__(me, x):
     y = me._arg(x)
