@@ -20,7 +20,7 @@ def main(ns, rcpath):
     finst = yield async.Sync(fief.Fief.new_a(rcpath))
     activated = _magic.env_selection(finst)
     ifc2pkg, pkg2built = yield async.Sync(deliver.deliver_a(finst, activated))
-
+    
     ed = EnvDelta()
     for pkg,built in pkg2built.iteritems():
       e = finst.repo.package(pkg).deliverable('envdelta', built)
