@@ -1,7 +1,5 @@
 import os
-from fief import repo
-from fief import conf
-from fief.repo import ifc, async, Cmd
+from fief import ifc, async, Cmd
 
 interfaces = {'cmake': ifc(requires='cc')}
 

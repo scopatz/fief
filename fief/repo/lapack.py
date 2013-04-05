@@ -1,8 +1,7 @@
 import os
 from fief import async
-from fief import repo
-from fief import conf
-from fief.repo import ifc, Cmd
+from fief import repository
+from fief import ifc, Cmd
 
 interfaces = {'lapack': ifc(requires=('cc', 'cmake', 'fortran'))}
 
