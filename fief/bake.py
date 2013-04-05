@@ -25,6 +25,27 @@ def _ensure_dirs(path):
   if not os.path.exists(d):
     os.makedirs(d)
 
+def _remove_clean(keep, rest):
+  assert not os.path.isabs(rest)
+  rest = rest.rstrip(os.path.sep)
+  
+  if rest != '':
+    p = os.path.join(keep, rest)
+    if os.path.isdir(p):
+      shutil.rmtree(p)
+    elif os.path.isfile(p):
+      os.remove(p)
+    
+    while True:
+      rest = os.path.dirname(rest)
+      if rest == '': break
+      p = os.path.join(keep, rest)
+      try:
+        os.rmdir(p)
+      except:
+        if os.path.isdir(p):
+          break
+
 def _sql_ensure_table(cxn, name, cols, ixs=()):
   cur = cxn.cursor()
   cur.execute("select name from sqlite_master where type='table' and name=?", (name,))
@@ -247,6 +268,8 @@ class Oven(object):
     return me._host_a(keys, _Stash(me))
   
   def _outfile_a(me, path):
+    """ returns a tuple (path,stuff), stuff is only used to delete the file later.
+    """
     def bump(cxn, ensure_table):
       ensure_table('outdirs', ('path','bump'), [['path']])
       cur = cxn.cursor()
@@ -266,11 +289,6 @@ class Oven(object):
     _ensure_dirs(opath)
     yield async.Result((opath,(path,n)))
   
-  def _kill_outfiles(me, outfs):
-    for o in outfs:
-      pass
-    assert False
-    
   def _is_outfile(me, path):
     o = os.path.join(os.path.realpath(me._path), 'o')
     p = os.path.realpath(path)
@@ -282,12 +300,12 @@ class Oven(object):
       try:
         result = yield async.Sync(fun_a(ctx))
       except:
-        for o in ctx._outfs:
-          if os.path.exists(o):
-            shutil.rmtree(o)
-        raise
+        e = sys.exc_info()
+        for p,n in ctx._outfs:
+          _remove_clean(me._path, os.path.join('o', p, str(n)))
+        raise e[0], e[1], e[2]
       finally:
-        yield async.Sync(ctx._flush_a())        
+        yield async.Sync(ctx._flush_a())
       yield async.Result(result)
     
     funval = valtool.Hasher().eat(fun_a).digest()

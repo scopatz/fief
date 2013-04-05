@@ -145,7 +145,7 @@ def deliver_a(fief, ifcs, partial=False):
   
   # wait for all packages
   for f in fut2pkg:
-    yield async.Wait(f)
+    yield async.WaitAny([f])
   
   yield async.Result((soln, dict(
     (pkg, fut.result()) for pkg,fut in pkg2fut.items()
