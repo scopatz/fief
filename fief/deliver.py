@@ -8,7 +8,7 @@ import async
 import fief
 import solve
 
-def deliver_a(fief, ifcs):
+def deliver_a(fief, ifcs, partial=False):
   """ returns (ifc2pkg, pkg2built) where:
     ifc2pkg: dict that maps interfaces to chosen packages
     pkg2built: dict that maps package to built value
@@ -65,6 +65,8 @@ def deliver_a(fief, ifcs):
     raise Exception(msg)
   
   soln = least[0]
+  
+  assert not partial
   
   pkg_deps = {} # package to package dependencies, not transitively closed
   for ifc,pkg in soln.iteritems():
