@@ -34,16 +34,16 @@ def exportvars(currenv=None, origenv=None):
         s = " ".join(changed)
         sys.stdout.write(s)
 
-def env_selection(conf=None):
+def env_selection(finst=None):
     """Gets the current interface selections from the environment."""
     selenv = os.getenv('FIEF_SELECTION', '')    
     selenv = set(selenv.replace("'", '').replace('"', '').split())
     selenv.discard('')
     if 0 == len(selenv):
-        if conf is None:
+        if finst is None:
             selenv = set()
         else:
-            selenv = conf.interfaces
+            selenv = finst.default_interfaces()
     return selenv
 
 

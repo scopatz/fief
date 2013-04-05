@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+import os
 import sys
 
 if sys.version_info[0] == 3 or sys.version_info[:2] == (2, 7):
@@ -6,8 +7,22 @@ if sys.version_info[0] == 3 or sys.version_info[:2] == (2, 7):
 else:
     from . import _argparse as argparse
 
-from _conf import Conf
-
+def default_rcpath():
+  path = os.getcwd()
+  root = os.path.splitdrive(path)[0] + os.path.sep
+  rellocs = ['fiefrc.py', 'fiefrc', 
+             os.path.join('.config', 'fiefrc.py'),
+             os.path.join('.config', 'fiefrc'),]
+  while True:
+    for relloc in rellocs:
+      p = os.path.join(path, relloc)
+      if os.path.isfile(p):
+        return p
+    if path == root:
+      break
+    path = os.path.split(path)[0]
+  
+  return None
 
 def main(args=None):
     """Entry point for fief command line interface."""
@@ -16,14 +31,13 @@ def main(args=None):
     ns = parser.parse_args(args)
     if hasattr(ns, 'options'):
         ns.options = ns.options[1:] if ['--'] == ns.options[:1] else ns.options
-    config = Conf()
-
+    
     # Run the fief command, use dynamic import
     if '.' not in sys.path:
         sys.path.insert(0, '.')
     cmdmod = __import__(ns.cmd, globals(), locals(), fromlist=[None])
     mainfunc = getattr(cmdmod, 'main')
-    rtn = mainfunc(ns, config)
+    rtn = mainfunc(ns, ns.rc)
 
     # Handle some edge cases
     if rtn is NotImplemented:
@@ -45,10 +59,10 @@ def _make_argparser():
     # convenience addition functions
     add_ifcs = lambda p: p.add_argument('ifcs', type=str, nargs='+', metavar='ifc', 
                                         help='activate additional interfaces')
-    add_conf = lambda p: p.add_argument('--conf', type=str, dest='conf', 
+    add_rc = lambda p: p.add_argument('--rc', type=str, dest='rc', 
                                         required=False,
                                         help='configuration file path', 
-                                        default='<conf-file>')
+                                        default=default_rcpath())
     add_verbose = lambda p: p.add_argument('-v', '--verbose', 
                                            dest='verbose', action='store_true',
                                            help='show more information', default=False)
@@ -64,32 +78,32 @@ def _make_argparser():
     # realize command
     subparser = subparsers.add_parser('realize', 
                     help="creates a selection of interfaces.")
-    add_conf(subparser)
+    add_rc(subparser)
     add_lazy(subparser)
     add_verbose(subparser)
 
     # selection
     subparser = subparsers.add_parser('selection', 
                     help="displays the current interface selections.")
-    add_conf(subparser)
+    add_rc(subparser)
 
     # select
     subparser = subparsers.add_parser('select', 
                     help="add interfaces to the current environment.")
-    add_conf(subparser)
+    add_rc(subparser)
     add_verbose(subparser)
     add_ifcs(subparser)
 
     # deselect
     subparser = subparsers.add_parser('deselect',
                     help="removes interfaces from the current environment.")
-    add_conf(subparser)
+    add_rc(subparser)
     add_verbose(subparser)
     add_ifcs(subparser)
 
     # oven
     subparser = subparsers.add_parser('oven', help="manipulates the current oven.")
-    add_conf(subparser)
+    add_rc(subparser)
     add_verbose(subparser)
     add_clean(subparser)
 

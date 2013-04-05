@@ -3,14 +3,20 @@ from copy import deepcopy
 
 _undo_key = 'FIEF_UNDO'
 
+def _ensure_set(xs):
+  return set(xs if hasattr(xs, '__iter__') else (xs,))
+
+def _ensure_sets(sets):
+  return dict((var,_ensure_set(xs)) for var,xs in sets.iteritems())
+
 class EnvDelta(object):
   def __init__(me, sets=None, scalars=None):
-    me._set_adds = sets or {}
+    me._set_adds = _ensure_sets(sets or {})
     me._sca_defs = scalars or {}
 
   @classmethod
   def fromiter(cls, var, vals):
-    return cls(sets={var: set(vals if hasattr(vals, '__iter__') else (vals,))})
+    return cls(sets={var: _ensure_set(vals)})
 
   @classmethod
   def fromscalar(cls, var, val):
