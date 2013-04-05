@@ -102,7 +102,7 @@ def _make_argparser():
     add_ifcs(subparser)
 
     # oven
-    subparser = subparsers.add_parser('oven', help="manipulates the current oven.")
+    subparser = subparsers.add_parser('stash', help="manipulates the current stash.")
     add_rc(subparser)
     add_verbose(subparser)
     add_clean(subparser)
