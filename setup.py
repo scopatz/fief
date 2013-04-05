@@ -10,7 +10,7 @@ def make_bash_completion():
     sys.path.pop(0)
     parser = main._make_argparser()
     fiefbc = _magic.bashcompgen(parser)
-    configdir = os.path.join(main.HOME, '.config')
+    configdir = os.path.join(_magic.HOME, '.config')
     if not os.path.exists(configdir):
         os.makedirs(configdir)
     with open(os.path.join(configdir, 'fiefbc'), 'w') as f:
