@@ -26,6 +26,8 @@ def _ensure_dirs(path):
     os.makedirs(d)
 
 def _remove_clean(keep, rest):
+  """Remove file or tree at 'os.path.join(keep,rest)'.  Then remove all empty dirs
+  up to but not including 'keep'.  Does not fail when things don't exist."""
   assert not os.path.isabs(rest)
   rest = rest.rstrip(os.path.sep)
   
@@ -376,12 +378,18 @@ class _View(object):
     me._argmemo = {}
   
   def _tagkey_a(me, tag, key):
-    assert tag in (_tag_inp, _tag_arg)
+    assert tag in (_tag_inp, _tag_arg, _tag_args)
     if tag == _tag_inp:
       h = yield async.Sync(me._hash_input_a(key))
       yield async.Result(h)
-    else:
+    elif tag == _tag_inps:
+      assert type(key) is frozenset
+      hs = yield async.Sync(me._hash_inputs_a(key))
+      yield async.Result([h for _,h in sorted(hs.iteritems())])
+    elif tag == _tag_arg:
       yield async.Result(me._arg(key))
+    else:
+      yield async.Result(me._args(key))
   
   def _hash_input_a(me, inp):
     ans = yield async.Sync(me._oven.query_a([inp]))
@@ -394,6 +402,10 @@ class _View(object):
     if x not in me._argmemo:
       me._argmemo[x] = me._argmap(x, lambda x: me._par._arg(x))
     return me._argmemo[x]
+  
+  def _args(me, xs):
+    assert type(xs) is frozenset
+    return [y for _,y in sorted((x,me._arg(x)) for x in xs)]
 
 class _Context(_View):
   def __init__(me, oven, par, argmap, log):
@@ -410,6 +422,10 @@ class _Context(_View):
       me._inphold.append(key)
     return key
   
+  def inputs(me, keys):
+    for key in keys:
+      me.input(key)
+  
   def _is_outfile(me, path):
     return me._oven._is_outfile(path)
   
@@ -424,6 +440,21 @@ class _Context(_View):
       me._argset.add(x)
       me._log.add(_tag_arg, x, y)
     return y
+  
+  def args(me, xs):
+    assert isinstance(xs, dict)
+    ys = {}
+    ys1 = {}
+    for k,x in xs.iteritems():
+      ys[k] = me._arg(x)
+      if x not in me._argset:
+        me._argset.add(x)
+        ys1[x] = ys[k]
+    if len(ys1) > 0:
+      key = frozenset(ys1.iterkeys())
+      val = [y for x,y in sorted(ys1.iteritems())]
+      me._log.add(_tag_args, key, val)
+    return ys
   
   def __call__(me, fun_a, argmap=(lambda x,up: up(x))):
     assert argmap is not None
@@ -447,12 +478,20 @@ class _Context(_View):
     if len(me._inphold) > 0:
       them = yield async.Sync(me._hash_inputs_a(me._inphold))
       del me._inphold[:]
-      for inf in them:
-        me._log.add(_tag_inp, inf, them[inf])
+      if False:
+        for inf in them:
+          me._log.add(_tag_inp, inf, them[inf])
+      else:
+        if len(them) > 0:
+          key = frozenset(them.iterkeys())
+          val = [h for x,h in sorted(them.iteritems())]
+          me._log.add(_tag_inps, key, val)
 
 _tag_done = 0
 _tag_inp = 1
-_tag_arg = 2
+_tag_inps = 2
+_tag_arg = 3
+_tag_args = 4
 
 class _Log(object):
   def __init__(me, funval):
@@ -520,12 +559,10 @@ class _LogDb(object):
       cur.execute('select rowid,val from valbag where hash=?', (h1,))
       row = None
       for got in cur.fetchall():
-        #if pickle.loads(str(got[1])) == tk:
         if valtool.unpack(got[1]) == val:
           row = got[0]
           break
       if row is None:
-        #k = pickle.dumps(tk, protocol=pickle.HIGHEST_PROTOCOL)
         v = valtool.pack(val)
         cur.execute('insert into valbag(val,hash) values(?,?)', (buffer(v),h1))
         row = cur.lastrowid
@@ -538,7 +575,6 @@ class _LogDb(object):
     if row not in me._valdec:
       cur = cxn.cursor()
       cur.execute('select val from valbag where rowid=?', (row,))
-      #tk = pickle.loads(str(cur.fetchone()[0]))
       val = valtool.unpack(cur.fetchone()[0])
       me._valdec[row] = val
       me._valenc[valtool.Hasher().eat(val).digest()] = row
@@ -594,17 +630,22 @@ class _LogDb(object):
             break
           if ix == len(wip._tags):
             yield async.Wait(wip._bar.enlist())
+          
           err = wip.error()
           if err is not None:
             yield async.Result(wip)
-          tag, key = wip._tags[ix], wip._keys[ix]
+          
+          tag = wip._tags[ix]
+          key = wip._keys[ix]
           if tag == _tag_done:
             yield async.Result(wip) # this wip computed the value we need
           elif tag == _tag_arg:
             val = view._arg(key)
+          elif tag == _tag_args:
+            val = view._args(key)
           else:
-            assert tag == _tag_inp
-            val = wip._vals[ix+1]
+            assert tag in (_tag_inp, _tag_inps)
+            val = wip._vals[ix+1] # FIXME we assume MemoHost so inputs will match, this is bad
           ix += 1
     
     def step(cxn, enstab, par, partag, val):
@@ -626,11 +667,13 @@ class _LogDb(object):
     tag, key = -1, None
     log = _Log(funval) # rebuild as we traverse trie
     while True:
-      got = yield async.Sync(me._oven._dbjob(lambda cxn, enstab: step(cxn, enstab, par, tag, val)))
+      got = yield async.Sync(me._oven._dbjob(
+        lambda cxn, enstab: step(cxn, enstab, par, tag, val)
+      ))
       if got is None:
-        #print >> sys.stderr, 'FAILED', tag, key, repr(val)
         log = None
         break
+      
       par, (tag, key) = got
       if tag == _tag_done:
         log.finish(key)
@@ -676,11 +719,6 @@ class _LogDb(object):
             assert tag != _tag_done
             i = 0
             while True:
-              #if i == len(ixs):
-              #  print 'TAGKEY', tag, key
-              #  print 'IXS', ixs
-              #  for i in xrange(len(log._tags)):
-              #    print i, log._tags[i], log._keys[i]
               assert i < len(ixs)
               ix = ixs[i]
               if log._tags[ix] == tag and log._keys[ix] == key:
@@ -780,27 +818,28 @@ class _LogDb(object):
       
     """
     class Match(object):
-    def input_a(me, x, query_host_a):
-      assert False
-    def arg(me, x):
-      assert False
-    def result(me, x):
-      assert False
+      def input_a(me, x, query_host_a):
+        assert False
+      def arg(me, x):
+        assert False
+      def result(me, x):
+        assert False
     """
     oven = me._oven
     fings = [(-1, -1, TestEqual(funval, lambda y: match))]
     while len(fings) > 0:
-      fings1 = yield async.Sync(oven._dbjob(lambda cxn, enstab: step(cxn, enstab, fings)))
+      fings1 = yield async.Sync(oven._dbjob(
+        lambda cxn, enstab: step(cxn, enstab, fings)
+      ))
       del fings[:]
       rowtag = {}
-      for row, tag, key, m in fings1:
+      for row,tag,key,m in fings1:
         if tag == _tag_inp:
           def query_a(x):
             y = yield async.Sync(oven.query_a((x,)))
             yield async.Result(y[x])
           fut = yield async.Begin(m.input_a(key, query_a))
           rowtag[fut] = (row,tag)
-          #test = yield async.Sync(m.input_a(key, query_a))
         else:
           if tag == _tag_arg:
             test = m.arg(key)
