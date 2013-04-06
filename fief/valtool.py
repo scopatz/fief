@@ -9,92 +9,92 @@ class Hasher(object):
   def _make():
     act = {}
     
-    def f(h,s,x):
+    def f(put,s,x):
       code = x.func_code
       cells = x.func_closure
-      h.update('func.%x.%x.%x.' % (len(code.co_code), len(code.co_consts or ()), len(cells or ())))
-      h.update(code.co_code)
+      put('fn.%x.%x.%x.' % (len(code.co_code), len(code.co_consts or ()), len(cells or ())))
+      put(code.co_code)
       s += code.co_consts or ()
       for cell in cells or ():
         s.append(cell.cell_contents)
     act[type(f)] = f
     
-    def f(h,s,x):
-      h.update('list.%x.' % len(x))
+    def f(put,s,x):
+      put('ls.%x.' % len(x))
       s += x
     act[list] = f
 
-    def f(h,s,x):
-      h.update('tuple.%x.' % len(x))
+    def f(put,s,x):
+      put('tp.%x.' % len(x))
       s += x
     act[tuple] = f
     
-    def f(h,s,x):
-      h.update('dict.%x.' % len(x))
+    def f(put,s,x):
+      put('d.%x.' % len(x))
       for k,v in sorted(x.iteritems()):
         s.append(k)
         s.append(v)
     act[dict] = f
     
-    def f(h,s,x):
-      h.update('set.%x.' % len(x))
+    def f(put,s,x):
+      put('se.%x.' % len(x))
       s += sorted(x)
     act[set] = f
     
-    def f(h,s,x):
-      h.update('str.%x.' % len(x))
-      h.update(x)
+    def f(put,s,x):
+      put('sz.%x.' % len(x))
+      put(x)
     act[str] = f
     
-    def f(h,s,x):
-      h.update('bytearray.%x.' % len(x))
-      h.update(x)
+    def f(put,s,x):
+      put('by.%x.' % len(x))
+      put(x)
     act[bytearray] = f
     
-    def f(h,s,x):
-      h.update('array.%s.%x.' % (x.typecode, len(x)))
-      h.update(x)
+    def f(put,s,x):
+      put('ar.%s.%x.' % (x.typecode, len(x)))
+      put(buffer(x))
     act[array] = f
     
-    def f(h,s,x):
-      h.update('buffer.%x.' % len(x))
-      h.update(x)
+    def f(put,s,x):
+      put('bu.%x.' % len(x))
+      put(x)
     act[buffer] = f
     
-    def f(h,s,x):
-      h.update('int.%x.' % long(x))
+    def f(put,s,x):
+      put('i.%x.' % long(x))
     act[int] = f
     act[long] = f
     
-    def f(h,s,x):
-      h.update('float.')
-      h.update(struct.pack('<d', x))
+    def f(put,s,x):
+      put('fo.')
+      put(struct.pack('<d', x))
     act[float] = f
     
-    def f(h,s,x):
-      h.update('true.' if x else 'false.')
+    def f(put,s,x):
+      put('t.' if x else 'f.')
     act[bool] = f
     
-    def f(h,s,x):
-      h.update('none.')
+    def f(put,s,x):
+      put('n.')
     act[type(None)] = f
     
-    def act_unk(h,s,x):
+    def act_unk(put,s,x):
       ty = type(x)
       if ty is getattr(sys.modules[ty.__module__], ty.__name__, None):
-        h.update('unk.%s.%s.' % (ty.__module__, ty.__name__))
+        put('ob.%s.%s.' % (ty.__module__, ty.__name__))
         if hasattr(x, '__getstate__'):
-          h.update('st.')
+          put('s.')
           s.append(x.__getstate__())
         else:
           fs = getattr(ty,'__slots__',None) or getattr(x,'__dict__',{}).iterkeys()
           fs = list(f for f in sorted(fs) if hasattr(x, f))
-          h.update('fs.%x.' % len(fs))
+          put('f.%x.' % len(fs))
           for f in fs:
             s.append(f)
             s.append(getattr(x, f))
       else:
-        h.update('?')
+        put('?')
     
     return lambda ty: act.get(ty, act_unk)
   
@@ -111,47 +111,100 @@ class Hasher(object):
       me._h.update(x)
       me._dig = None
     return me
-    
+  
   def eat(me, x):
     act = me._act[0]
-    h = me._h
+    b = bytearray()
     s = [x] # stack of unprocessed values
-    open_stk = []
+    open_x = []
+    open_b0 = array('i')
+    open_h = []
     open_num = array('i')
     open_set = {}
+    memo = {}
     xc = 0
+    
+    def put(z):
+      h = open_h[-1]
+      b0 = open_b0[-1]
+      if h is not None:
+        h.update(z)
+      elif len(b)-b0 + len(z) >= 256:
+        h = hashlib.md5()
+        h.update(buffer(b, b0))
+        h.update(z)
+        del b[b0:]
+        open_h[-1] = h
+      else:
+        b.extend(z)
+    
     while len(s) > 0:
       x = s.pop()
+      open_h.append(None)
+      open_b0.append(len(b))
       if not getattr(x, '__valtool_ignore__', False):
-        if id(x) in open_set:
-          h.update('cycle.%x.' % open_set[x])
-          n = 0
+        id_x = id(x)
+        if id_x in open_set:
+          put('cy.%x.' % open_set[id_x])
+          sn = 0
+        elif id_x in memo:
+          put(memo[id_x])
+          sn = 0
         else:
-          t = type(x)
-          a = act(t)
-          n = len(s)
-          a(h,s,x)
-          n = len(s) - n
+          sn = len(s)
+          act(type(x))(put, s, x)
+          sn = len(s) - sn
       else:
-        n = 0
+        put('_')
+        sn = 0
       
-      if n == 0:
+      if sn > 0:
+        open_x.append(x)
+        open_num.append(sn)
+        open_set[id(x)] = xc
+        xc += 1
+      else:
         while True:
           if len(open_num) == 0:
             assert len(s) == 0
             break
-          n = open_num[-1] - 1
-          if n > 0:
-            open_num[-1] = n
+          
+          h = open_h.pop()
+          b0 = open_b0.pop()
+          if h is not None:
+            assert b0 == len(b)
+            dig = '#' + h.digest()
+            memo[id(x)] = dig
+            put(dig)
+          else:
+            h = open_h[-1]
+            b0 = open_b0[-1]
+            if h is not None:
+              h.update(buffer(b, b0))
+              del b[b0:]
+            elif len(b)-b0 >= 256:
+              h = hashlib.md5()
+              h.update(buffer(b, b0))
+              del b[b0:]
+              open_h[-1] = h
+          
+          sn = open_num[-1] - 1
+          if sn > 0:
+            open_num[-1] = sn
             break
           else:
             open_num.pop()
-            del open_set[id(open_stk.pop())]
-      else:
-        open_stk.append(x)
-        open_num.append(n)
-        open_set[id(x)] = xc
-        xc += 1
+            x = open_x.pop()
+            del open_set[id(x)]
+    
+    assert len(open_h) == 1
+    assert 0 == open_b0[0]
+    
+    h = open_h[0]
+    if h is not None:
+      me._h.update('#' + h.digest())
+    else:
+      me._h.update(b)
     
     me._dig = None
     return me
@@ -161,6 +214,21 @@ class Hasher(object):
       me._dig = me._h.digest()
     return me._dig
 
+if False: # hasher test
+  import time
+  val = lambda: dict((a,str(666*a)*7) for a in xrange(1<<10))
+  x = val()
+  x1 = tuple(x for i in xrange(1<<10))
+  x2 = tuple(val() for i in xrange(1<<10))
+  t1 = time.clock()
+  h1 = Hasher().eat(x1).digest()
+  t2 = time.clock()
+  t1 = t2 - t1
+  h2 = Hasher().eat(x2).digest()
+  t2 = time.clock() - t2
+  print 'x1==x2',  h1==h2
+  print 't2/t1', t2*1.0/t1
+  
 def _make():
   cata_tbl = {} # maps types to catamorphism actions
   ana_tbl = [] # maps leading bytes (opcodes) to anamorphism actions
@@ -528,7 +596,7 @@ def _make():
 
 pack, unpack = _make()
 
-if False: # test
+if False: # pack/unpack test
   x = {
     (1,2): "hello",
     (-1,1<<31): bytearray('ba'),

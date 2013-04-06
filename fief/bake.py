@@ -71,7 +71,7 @@ class Cmd(object):
     me._toks = []
     me._oxs = {}
     me.cwd = cwd
-    me.env = env or {}
+    me.env = env or dict(os.environ)
     me.executable = executable # if os.name == 'nt' else None
     me.tag = tag
     me.showout = showout
@@ -116,20 +116,20 @@ class Cmd(object):
       me.returncode = p.returncode
     
     if me.tag is not None:
-      tag = ' ' + me.tag + '] '
+      tag = me.tag + ': '
     else:
-      tag = '] '
+      tag = ''
     
     if me.showerr:
-      print >> sys.stderr, '[RUN' + tag + me.shline
+      print >> sys.stderr, '[RUN] ' + tag + me.shline
     yield async.Sync(go)
     
     if me.showerr and me.stderr != '':
-      print >> sys.stderr, '-'*72 + '\n[MSG' + tag + me.shline + '\n' + \
+      print >> sys.stderr, '-'*72 + '\n[MSG] ' + tag + me.shline + '\n' + \
         me.stderr + ('' if me.stderr[-1] == '\n' else '\n') + '-'*72
     
     if me.showout and me.stdout != '':
-      print >> sys.stderr, '-'*72 + '\n[OUT' + tag + me.shline + '\n' + \
+      print >> sys.stderr, '-'*72 + '\n[OUT] ' + tag + me.shline + '\n' + \
         me.stdout + ('' if me.stdout[-1] == '\n' else '\n') + '-'*72
     
     if me.returncode != 0:
