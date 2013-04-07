@@ -1,41 +1,31 @@
 import os
-from fief import ifc, async, Cmd
+from fief import ifc, easy, async, Cmd, EnvDelta
 
 interfaces = {'cmake': ifc(requires='cc')}
 
-def realize(delivs):
-  root = delivs['root']
-  env = {'PATH': [os.path.join(root, 'bin')]}
-  return env
+def deliverable_envdelta(built):
+  return EnvDelta(sets={'PATH': [os.path.join(built['root'], 'bin')]})
 
-def build_a(ctx):
-  pkg = ctx['pkg']
-  assert any([ctx['interface', ifc] == pkg for ifc in interfaces])
-  psrc = yield async.WaitFor(repo.fetch_nomemo_a(ctx, pkg))
-  env = yield async.WaitFor(repo.realize_deps_a(ctx, interfaces))
+def build_a(ctx, pkg, src, opts):
+  root = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
+  root = os.path.abspath(root)
+  os.mkdir(root)
 
-  try:
-    src, cleanup = yield async.WaitFor(repo.stage_nomemo_a(ctx, pkg))
-  
-    to = yield async.WaitFor(ctx.outfile_a('build', pkg))
-    to = os.path.abspath(to)
-    os.mkdir(to)
+  env = easy.gather_env(ctx, interfaces)
+  cmdkws = {'cwd': src, 'tag': pkg, 'env': env}
 
-    cmdkws = {'cwd': src, 'tag': pkg, 'env': env}
-    c = Cmd(ctx, **cmdkws)
-    bootstrap = ('bash', 'bootstrap') if os.name == 'nt' else './bootstrap'
-    c.lit(bootstrap, '--prefix=' + to)
-    yield async.WaitFor(c.exec_a())
+  c = Cmd(ctx, **cmdkws)
+  bootstrap = ('bash', 'bootstrap') if os.name == 'nt' else './bootstrap'
+  c.lit(bootstrap, '--prefix=' + root)
+  yield async.Sync(c.exec_a())
 
-    c = Cmd(ctx, **cmdkws)
-    c.lit(conf.make)
-    yield async.WaitFor(c.exec_a())
+  c = Cmd(ctx, **cmdkws)
+  c.lit(conf.make)
+  yield async.Sync(c.exec_a())
 
-    c = Cmd(ctx, **cmdkws)
-    c.lit(conf.make_install)
-    yield async.WaitFor(c.exec_a())
-  finally:
-    cleanup()
+  c = Cmd(ctx, **cmdkws)
+  c.lit(conf.make_install)
+  yield async.Sync(c.exec_a())
 
-  delivs = {'root': to, 'libs': set('z'), 'pkg': pkg}
+  delivs = {'root': root, 'pkg': pkg}
   yield async.Result(delivs)
