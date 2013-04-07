@@ -20,11 +20,11 @@ def build_a(ctx, pkg, src, opts):
   yield async.Sync(c.exec_a())
 
   c = Cmd(ctx, **cmdkws)
-  c.lit(conf.make)
+  c.lit('make', '-j', '3')
   yield async.Sync(c.exec_a())
 
   c = Cmd(ctx, **cmdkws)
-  c.lit(conf.make_install)
+  c.lit('make', 'install')
   yield async.Sync(c.exec_a())
 
   delivs = {'root': root, 'pkg': pkg}
