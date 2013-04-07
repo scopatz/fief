@@ -99,10 +99,11 @@ def _begin_tarball_a(me, path):
   
   def rest_a(ctx):
     exts = {
-      '.tgz'     : ('tar', 'xzf'),
-      '.tar.gz'  : ('tar', 'xzf'),
+      '.tgz': ('tar', 'xzf'),
+      '.tar.xz': ('tar', 'xf'),
+      '.tar.gz': ('tar', 'xzf'),
+      '.tar.bz2': ('tar', 'xjf'),
       '.tar.gzip': ('tar', 'xzf'),
-      '.tar.bz2' : ('tar', 'xjf')
     }
     rex = '.*(' + '|'.join(e.replace('.','\\.') for e in exts.keys()) + ')$'
     lits = exts[re.match(rex, path).group(1)]
