@@ -50,16 +50,21 @@ def configure_make_make_install(ifx=None, libs=None):
     yield async.Result(built)
   return build_a
 
+def _addwhendir(sets, key, d):
+  val = set(sets.get(key, ()))
+  if os.path.isdir(d):
+    val.add(d)
+  if 0 < len(val):
+    sets[key] = val
+
 def c_envdelta(built):
   root = built['root']
-  sets={
-    'PATH': [os.path.join(root, 'bin')],
-    'CPATH': [os.path.join(root, 'include')],
-    'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
-    }
-  pkgconf = os.path.join(root, 'lib', 'pkgconfig')
-  if os.path.isdir(pkgconf):
-    sets['PKG_CONFIG_PATH'] = [pkgconf]
+  sets={}
+  _addwhendir(sets, 'PATH', os.path.join(root, 'bin'))
+  _addwhendir(sets, 'CPATH', os.path.join(root, 'include'))
+  _addwhendir(sets, 'LD_LIBRARY_PATH', os.path.join(root, 'lib'))
+  _addwhendir(sets, 'PKG_CONFIG_PATH', os.path.join(root, 'lib', 'pkgconfig'))
+  _addwhendir(sets, 'MANPATH', os.path.join(root, 'share', 'man'))
   return envdelta.EnvDelta(sets=sets)  
 
 def find_libs(built):
@@ -85,6 +90,7 @@ packages = {
   'mpich': PackageScript('http://www.mpich.org/static/tarballs/3.0.1/mpich-3.0.1.tar.gz', p('mpich.py')),
   'numpy': PackageScript('https://github.com/numpy/numpy/archive/v1.7.0rc2.tar.gz', p('numpy.py')),
   'openmpi': PackageScript('http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.3.tar.bz2', p('openmpi.py')),
+  'sqlite': PackageScript('http://www.sqlite.org/2013/sqlite-autoconf-3071601.tar.gz', p('sqlite.py')),
   'sympy': PackageScript('https://github.com/sympy/sympy/archive/sympy-0.7.2.rc1.tar.gz', p('sympy.py')),
   'sys_cc': PackageScript(None, p('sys_cc.py')),
   'sys_fortran': PackageScript(None, p('sys_fortran.py')),

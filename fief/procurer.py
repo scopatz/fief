@@ -99,6 +99,7 @@ def _begin_tarball_a(me, path):
   
   def rest_a(ctx):
     exts = {
+      '.zip': ('unzip',),
       '.tgz': ('tar', 'xzf'),
       '.tar.xz': ('tar', 'xf'),
       '.tar.gz': ('tar', 'xzf'),
