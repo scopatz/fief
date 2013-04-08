@@ -22,7 +22,7 @@ class Fief(object):
     me._prefs = conf.get('preferences', {})
     me._opts = conf.get('options', lambda pkg,x: None)
     me._pkgs = conf.get('packages', {})
-    
+
     me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
     me.oven = bake.Oven(bake.MemoHost(bake.FileHost_a), os.path.join(me._path_stash, 'oven'))
     me.repo = yield async.Sync(repository.Repo.new_a(me.oven, me._pkgs))

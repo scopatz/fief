@@ -7,10 +7,6 @@ from .. import fief
 from .. import deliver
 import _magic
 
-USAGE = ("Realizes the current fief selection."
-         "usage: fief [realize]")
-
-
 def main(ns, rcpath):
   """Realizes the current fief selection."""
   

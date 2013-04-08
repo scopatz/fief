@@ -1,24 +1,12 @@
 import os
 from glob import glob
-from fief import ifc, easy, async, Cmd, EnvDelta, configure_make_make_install
+from fief import ifc, easy, async, Cmd, EnvDelta, configure_make_make_install, \
+    c_envdelta, find_libs
 
-#interfaces = {'libxml++': ifc(requires=['libxml2', 'glibmm'])}
-interfaces = {'libxml++': ifc()}
+interfaces = {'libxml++': ifc(requires=['libxml2', 'glibmm'])}
 
-def deliverable_envdelta(built):
-  root = built['root']
-  sets={
-    'PATH': [os.path.join(root, 'bin')],
-    'LD_LIBRARY_PATH': [os.path.join(root, 'lib')],
-    'INCLUDE_PATH': [os.path.join(root, 'include')],
-    }
-  pypath = glob(os.path.join(root, '*',  'site-packages')) + \
-           glob(os.path.join(root, '*', '*',  'site-packages'))
-  if 0 < len(pypath):
-    sets['PYTHONPATH'] = set(pypath)
-  return EnvDelta(sets=sets)
+deliverable_envdelta = c_envdelta
 
-def deliverable_libs(built):
-  return set(['xml2'])
+deliverable_libs = find_libs
 
 build_a = configure_make_make_install(interfaces)
