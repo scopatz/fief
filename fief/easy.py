@@ -79,6 +79,7 @@ repopath = os.path.join(os.path.split(__file__)[0], 'repo')
 p = lambda x: os.path.join(repopath, x)
 packages = {
   'atlas': PackageScript('http://sourceforge.net/projects/math-atlas/files/Stable/3.10.1/atlas3.10.1.tar.bz2/download', p('atlas.py')),
+  'bzip2': PackageScript('http://www.bzip.org/1.0.6/bzip2-1.0.6.tar.gz', p('bzip2.py')),
   'boost': PackageScript('http://sourceforge.net/projects/boost/files/boost/1.53.0/boost_1_53_0.tar.bz2/download', p('boost.py')),
   'cmake': PackageScript('http://www.cmake.org/files/v2.8/cmake-2.8.10.2.tar.gz', p('cmake.py')),
   'cython': PackageScript('http://cython.org/release/Cython-0.18.tar.gz', p('cython.py')),
