@@ -24,7 +24,7 @@ class Fief(object):
     me._pkgs = conf.get('packages', {})
 
     me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
-    me.oven = bake.Oven(bake.MemoHost(bake.FileHost_a), os.path.join(me._path_stash, 'oven'))
+    me.oven = bake.Oven(bake.MemoHost(bake.FileHost), os.path.join(me._path_stash, 'oven'))
     me.repo = yield async.Sync(repository.Repo.new_a(me.oven, me._pkgs))
     
     yield async.Result(me)

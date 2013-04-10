@@ -5,6 +5,8 @@ from collections import deque
 import sys
 import weakref
 
+catch_exceptions = True # set to False when debugging
+
 default_pool_size = multiprocessing.cpu_count()
 
 class Pool(object):
@@ -240,22 +242,30 @@ def run(a):
       wake_set.discard(st)
       assert st.wait_futs is None
       
-      try:
-        got = st.wake_meth(st)
-      except StopIteration:
-        got = Result(None)
-      except Exception, ex:
-        if not hasattr(ex, 'async_traceback'):
-          ex.async_traceback = st.traceback()
-        got = Raise(ex, sys.exc_traceback)
+      if catch_exceptions:
+        try:
+          got = st.wake_meth(st)
+        except StopIteration:
+          got = Result(None)
+        except AssertionError:
+          raise
+        except Exception, ex:
+          if not hasattr(ex, 'async_traceback'):
+            ex.async_traceback = st.traceback()
+          got = Raise(ex, sys.exc_traceback)
+      else:
+        try:
+          got = st.wake_meth(st)
+        except StopIteration:
+          got = Result(None)
       
       if isinstance(got, _Return):
         st.par_fut._finish(got)
       elif isinstance(got, Begin):
         assert st not in wake_set
-        fut = begin(st, got._task)
-        wake_list.append(st)
+        wake_list.appendleft(st)
         wake_set.add(st)
+        fut = begin(st, got._task)
         st.wake_fut = fut
         st.wake_meth = send_fut
       elif isinstance(got, Sync):

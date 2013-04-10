@@ -1,4 +1,5 @@
 import os
+import sys
 
 import async
 import envdelta
@@ -39,20 +40,26 @@ class PackageScript(Package):
     me._py = py_file
     me._ifx = None
     me._ns = None
-
+  
   def source(me):
     return me._src
-
+  
   def interfaces_a(me, oven):
+    box = [None]
     def load_ifx_a(ctx):
       py = ctx['py']
-      ctx.input(py)
-      ns = {}
-      execfile(py, ns, ns)
-      yield async.Result(ns['interfaces'])
+      ctx.infile(py)
+      box[0] = {}
+      execfile(py, box[0], box[0])
+      yield async.Result(box[0]['interfaces'])
     
     if me._ifx is None:
-      me._ifx = yield async.Sync(oven.memo_a(load_ifx_a, {'py':me._py}))
+      if me._ns is None:
+        me._ifx = yield async.Sync(oven.memo_a(load_ifx_a, {'py':me._py}))
+        me._ns = box[0]
+      else:
+        me._ifx = me._ns['interfaces']
+    
     yield async.Result(me._ifx)
   
   def _ensure_ns(me):

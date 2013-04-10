@@ -1,6 +1,7 @@
-import async
 import array
+import async
 import binascii
+import collections
 import hashlib
 import os
 import shutil
@@ -11,6 +12,7 @@ import sys
 import types
 import valtool
 
+deque = collections.deque
 _bin2hex = binascii.hexlify
 _hex2bin = binascii.unhexlify
 
@@ -85,13 +87,17 @@ class Cmd(object):
   
   def inf(me, path, fmt="%s"):
     path = os.path.normpath(path)
-    me._ctx.input(path)
+    me._ctx.infile(path)
     me._toks.append(fmt % path)
     return me
   
   def infs(me, paths, fmt="%s"):
+    ps = []
     for p in paths:
-      me.inf(p, fmt)
+      path = os.path.normpath(p)
+      ps.append(path)
+      me._toks.append(fmt % path)
+    me._ctx.infiles(ps)
     return me
   
   def outf(me, path, fmt="%s"):
@@ -104,6 +110,10 @@ class Cmd(object):
       ix, fmt = me._oxs[o]
       me._oxs[o] = fmt % (yield async.Sync(me._ctx.outfile_a(o)))
       me._toks[ix] = me._oxs[o]
+    
+    if len(me._oxs) == 0:
+      yield async.Sync(me._ctx.flush_a())
+    
     me.shline = subprocess.list2cmdline(me._toks)
     me.outs = me._oxs
   
@@ -137,13 +147,37 @@ class Cmd(object):
     if me.returncode != 0:
       raise subprocess.CalledProcessError(me.returncode, me.shline)
 
-def MemoHost(host_a):
+class Host(object):
+  def canonify(me, x):
+    return x
+  def lift_file(me, path):
+    assert False
+  def unlift_file(me, x):
+    assert False
+  def query_a(me, keys, stash):
+    assert False
+
+class MemoHost(Host):
   """Given a host, memoize it so that redundant key lookups are cached.  This
   makes sense when we expect the state of the world to remain frozen for the
   lifetime of this host object.
   """
-  cache = {}
-  def query_a(keys, stash):
+  def __init__(me, host):
+    me.host = host
+    me.cache = {}
+  
+  def canonify(me, x):
+    return me.host.canonify(x)
+  
+  def lift_file(me, path):
+    return me.host.lift_file(path)
+  
+  def unlift_file(me, x):
+    return me.host.unlift_file(x)
+  
+  def query_a(me, keys, stash):
+    host = me.host
+    cache = me.cache
     keys = keys if type(keys) is set else set(keys)
     vals = {}
     for k in keys:
@@ -151,93 +185,129 @@ def MemoHost(host_a):
         vals[k] = cache[k]
     if len(vals) != len(keys):
       keys1 = tuple(k for k in keys if k not in vals)
-      vals1 = yield async.Sync(host_a(keys1, stash))
+      vals1 = yield async.Sync(host.query_a(keys1, stash))
       vals.update(vals1)
       cache.update(vals1)
       assert len(vals) == len(keys)
     yield async.Result(vals)
-  return query_a
 
-def FileHost_a(paths, stash):
+class _FileHost(Host):
   """A host whose keys are interpreted as filesystem paths, the returned hashes values are content hashes.
   """
-  def action(path, old):
-    t0, h0 = old if old is not None else (0, '')
-    if os.path.exists(path):
-      t1 = int(os.path.getmtime(path)*10000)
-      if t0 != t1:
-        md5 = hashlib.md5()
-        with open(path, 'rb') as f:
-          for b in iter(lambda: f.read(8192), ''):
-            md5.update(b)
-        h1 = md5.digest()
+  def __call__(*a,**kw):
+    raise Exception("FileHost is an instance, not a constructor!")
+  
+  def canonify(me, x):
+    return os.path.abspath(x)
+  
+  def lift_file(me, path):
+    return path
+  
+  def unlift_file(me, x):
+    return x
+  
+  def query_a(me, paths, stash):
+    def action(path, old):
+      t0, h0 = old if old is not None else (0, '')
+      if os.path.exists(path):
+        t1 = int(os.path.getmtime(path)*10000)
+        if t0 != t1:
+          md5 = hashlib.md5()
+          with open(path, 'rb') as f:
+            for b in iter(lambda: f.read(8192), ''):
+              md5.update(b)
+          h1 = md5.digest()
+        else:
+          h1 = h0
       else:
-        h1 = h0
-    else:
-      t1, h1 = 0, ''
-    return (t1, h1) if (t1, h1) != (t0, h0) else old
-  reals = dict((p, os.path.realpath(p)) for p in paths)
-  ans = yield async.Sync(stash.updates_a(reals.keys(), action))
-  ans = dict((k,th[1]) for k,th in ans.iteritems())
-  yield async.Result(ans)
+        t1, h1 = 0, ''
+      return (t1, h1) if (t1, h1) != (t0, h0) else old
+    reals = dict((p, os.path.realpath(p)) for p in paths)
+    ans = yield async.Sync(stash.updates_a(reals.keys(), action))
+    ans = dict((k,th[1]) for k,th in ans.iteritems())
+    yield async.Result(ans)
+
+FileHost = _FileHost()
 
 def TestNo(y):
   return MatchNone
 
 class Match(object):
-  def input_a(me, x, query_host_a):
+  def inputs_a(me, xs, query_a):
+    """given tuple of input names 'xs', returns test over tuples of hashes"""
     assert False
-  def arg(me, x):
+  def args(me, xs):
+    """given tuple of arg names 'xs', returns test over tuple of values"""
     assert False
-  def result(me, x):
+  def result(me, y):
+    """reached function return of value y"""
     assert False
 
-class MatchNone(Match):
-  def input_a(me, x, query_host_a):
+class _MatchNone(Match):
+  def inputs_a(me, xs, query_a):
     yield async.Result(TestNo)
-  def arg(me, x):
+  def args(me, xs):
     return TestNo
-  def result(me, x):
-    return False
+  def result(me, y):
+    pass
+  def __call__(*a,**b):
+    assert False # MatchNone is not a constructor!
+MatchNone = _MatchNone()
 
-class TestEqual(object):
-  def __init__(me, val, next_match):
-    me._val = val
-    me._next_match = next_match
+class TestEqualAny(object):
+  def __init__(me, values, next_match):
+    """vals: list of values to test equality, next_match: val->Match"""
+    me.values = values if isinstance(values, tuple) else tuple(values)
+    me.next_match = next_match
   def __call__(me, y):
-    return me._next_match(y) if me._val == y else MatchNone
+    return me.next_match(y) if y in me.values else MatchNone
+
+class TestNotEqualAll(object):
+  def __init__(me, values, next_match):
+    """vals: list of values to test equality, next_match: val->Match"""
+    me.values = values if isinstance(values, tuple) else tuple(values)
+    me.next_match = next_match
+  def __call__(me, y):
+    return me.next_match(y) if y not in me.values else MatchNone
 
 class MatchArgs(Match):
-  def __init__(me, argtest, collector):
+  def __init__(me, argstest, collector):
     """accepts only inputs that match current host hash value, defers to
-    argtest to generate test lambda for args.
-    
-    argtest: takes (x, next_match), returns tester
+    argstest to generate test lambda for args.
+    argstest: takes (xs, next_match), returns tester
     collector: takes ({x:y}, result) for argument name and values x,y
     """
-    me._argtest = argtest
+    me._argstest = argstest
     me._collector = collector
     me._argmem = {}
   
-  def input_a(me, x, query_host_a):
-    h = yield async.Sync(query_host_a(x))
-    yield async.Result(TestEqual(h, lambda y: me))
+  def inputs_a(me, xs, query_a):
+    hs = yield async.Sync(query_a(xs))
+    hs = tuple(hs[x] for x in xs)
+    yield async.Result(TestEqualAny((hs,), lambda _: me))
   
-  def arg(me, x):
-    def next_match(y):
-      m = MatchArgs(me._argtest, me._collector)
+  def args(me, xs):
+    def next_match(ys):
+      m = MatchArgs(me._argstest, me._collector)
       m._argmem.update(me._argmem)
-      m._argmem[x] = y
+      for i in xrange(len(xs)):
+        m._argmem[xs[i]] = ys[i]
       return m
-    return me._argtest(x, next_match)
+    return me._argstest(xs, next_match)
   
   def result(me, ans):
     return me._collector(me._argmem, ans)
 
+class ArgMode: # enum
+  stored = object()
+  group_stored = object()
+  hashed = object()
+  group_hashed = object()
+
 class Oven(object):
-  def __init__(me, host_a, path):
+  def __init__(me, host, path):
     object.__init__(me)
-    me._host_a = host_a
+    me._host = host
     me._path = path
     me._dbcxn = None
     me._dbpath = os.path.join(path, "db")
@@ -251,6 +321,7 @@ class Oven(object):
       if me._dbcxn is None:
         _ensure_dirs(me._dbpath)
         me._dbcxn = sqlite3.connect(me._dbpath)
+        me._dbcxn.execute('pragma synchronous=off')
       def ensure_table(name, cols, ixs=()):
         if name not in me._dbtabs:
           me._dbtabs.add(name)
@@ -262,12 +333,16 @@ class Oven(object):
     @async.assign_pool(me._dbpool)
     def close_it():
       if me._dbcxn is not None:
+        me._dbcxn.commit()
         me._dbcxn.close()
         me._dbcxn = None
     yield async.Sync(close_it)
   
+  def host(me):
+    return me._host
+  
   def query_a(me, keys):
-    return me._host_a(keys, _Stash(me))
+    return me._host.query_a(keys, _Stash(me))
   
   def _outfile_a(me, path):
     """ returns a tuple (path,stuff), stuff is only used to delete the file later.
@@ -283,6 +358,7 @@ class Oven(object):
       else:
         got = got[0]
         cur.execute('update outdirs set bump=? where path=?', (got+1,path))
+      cxn.commit()
       return got
     
     n = yield async.Sync(me._dbjob(bump))
@@ -296,9 +372,9 @@ class Oven(object):
     p = os.path.realpath(path)
     return p.startswith(o + os.path.sep) # ugly, should use os.path.samefile
   
-  def _memo_a(me, par, fun_a, argmap):
+  def _memo_a(me, argmode, par, fun_a, argmap):
     def calc_a(log):
-      ctx = _Context(me, par, argmap, log)
+      ctx = _Context(me, argmode, par, argmap, log)
       try:
         result = yield async.Sync(fun_a(ctx))
       except:
@@ -307,7 +383,7 @@ class Oven(object):
           _remove_clean(me._path, os.path.join('o', p, str(n)))
         raise e[0], e[1], e[2]
       finally:
-        yield async.Sync(ctx._flush_a())
+        yield async.Sync(ctx.flush_a())
       yield async.Result(result)
     
     funval = valtool.Hasher().eat(fun_a).digest()
@@ -315,13 +391,14 @@ class Oven(object):
     log = yield async.Sync(me._logdb.memo_a(funval, view, calc_a))
     yield async.Result(log)
   
-  def memo_a(me, fun_a, argroot):
+  def memo_a(me, fun_a, argroot, argmode=lambda x: ArgMode.group_hashed):
     assert argroot is not None
     if isinstance(argroot, dict):
       argmap = lambda x,up: argroot.get(x, None)
     else:
       argmap = lambda x,up: argroot(x)
-    log = yield async.Sync(me._memo_a(None, fun_a, argmap))
+    
+    log = yield async.Sync(me._memo_a(argmode, None, fun_a, argmap))
     yield async.Result(log.result()) # will throw if fun_a did, but thats ok
   
   def search_a(me, fun_a, match):
@@ -339,6 +416,7 @@ class _Stash(object):
       try:
         cur = cxn.cursor()
         ans = {}
+        changed = False
         for k in keys:
           hk = valtool.Hasher().eat(k).digest()
           hk0 = struct.unpack_from('<i', hk)[0]
@@ -349,14 +427,17 @@ class _Stash(object):
           ans[k] = new
           if row is not None and new is None:
             cur.execute('delete from stash where hk0=? and hk1=?', (hk0,hk1))
+            changed = True
           elif row is None and new is not None:
             val = valtool.pack(new)
             cur.execute('insert into stash(hk0,hk1,val) values(?,?,?)', (hk0,hk1,buffer(val)))
+            changed = True
           elif old is not new:
             val = valtool.pack(new)
             cur.execute('update stash set val=? where hk0=? and hk1=?', (buffer(val),hk0,hk1))
-        cur.close()
-        cxn.commit()
+            changed = True
+        if changed:
+          cxn.commit()
         return ans
       except:
         cxn.rollback()
@@ -377,20 +458,6 @@ class _View(object):
     me._argmap = argmap
     me._argmemo = {}
   
-  def _tagkey_a(me, tag, key):
-    assert tag in (_tag_inp, _tag_arg, _tag_args)
-    if tag == _tag_inp:
-      h = yield async.Sync(me._hash_input_a(key))
-      yield async.Result(h)
-    elif tag == _tag_inps:
-      assert type(key) is frozenset
-      hs = yield async.Sync(me._hash_inputs_a(key))
-      yield async.Result([h for _,h in sorted(hs.iteritems())])
-    elif tag == _tag_arg:
-      yield async.Result(me._arg(key))
-    else:
-      yield async.Result(me._args(key))
-  
   def _hash_input_a(me, inp):
     ans = yield async.Sync(me._oven.query_a([inp]))
     yield async.Result(ans[inp])
@@ -403,33 +470,74 @@ class _View(object):
       me._argmemo[x] = me._argmap(x, lambda x: me._par._arg(x))
     return me._argmemo[x]
   
-  def _args(me, xs):
-    assert type(xs) is frozenset
-    return [y for _,y in sorted((x,me._arg(x)) for x in xs)]
+  def _tagkey_a(me, tag, key):
+    if tag == _tag_inp:
+      h = yield async.Sync(me._oven.query_a((key,)))
+      yield async.Result(h[key])
+    else:
+      yield async.Result(me._arg_tagkey(tag, key))
+  
+  def _arg_tagkey(me, tag, key):
+    if tag == _tag_arg:
+      return me._arg(key)
+    elif tag == _tag_argh:
+      return valtool.Hasher().eat(me._arg(key)).digest()
+    elif tag in (_tag_args_wip, _tag_argsh_wip):
+      return dict((x,me._arg(x)) for x in key)
+    elif tag == _tag_args_db:
+      return tuple(me._arg(x) for x in key)
+    elif tag == _tag_argsh_db:
+      return valtool.Hasher().eatseq(me._arg(x) for x in key).digest()
+    else:
+      assert False
 
 class _Context(_View):
-  def __init__(me, oven, par, argmap, log):
+  def __init__(me, oven, argmode, par, argmap, log):
     super(_Context, me).__init__(oven, par, argmap)
+    me._argmode = argmode
     me._log = log
     me._inpset = set()
     me._inphold = []
     me._argset = set()
     me._outfs = []
   
-  def input(me, key):
-    if key not in me._inpset and not me._is_outfile(key):
-      me._inpset.add(key)
-      me._inphold.append(key)
-    return key
+  def input(me, x):
+    x = me._oven.host().canonify(x)
+    if x not in me._inpset:
+      p = me._oven.host().unlift_file(x)
+      if p is None or not me._oven._is_outfile(p):
+        me._inpset.add(x)
+        me._inphold.append(x)
+    return x
   
-  def inputs(me, keys):
-    for key in keys:
-      me.input(key)
+  def inputs(me, xs):
+    for x in xs:
+      me.input(x)
+    return xs
   
-  def _is_outfile(me, path):
-    return me._oven._is_outfile(path)
+  def infile(me, path):
+    x = me._oven.host().lift_file(path)
+    x = me._oven.host().canonify(x)
+    if x not in me._inpset:
+      if not me._oven._is_outfile(path):
+        me._inpset.add(x)
+        me._inphold.append(x)
+    return path
+  
+  def infiles(me, paths):
+    for p in paths:
+      me.infile(p)
+    return paths
+  
+  def flush_a(me):
+    if len(me._inphold) > 0:
+      h = yield async.Sync(me._hash_inputs_a(me._inphold))
+      for x in me._inphold:
+        me._log.add(_tag_inp, x, h[x])
+      del me._inphold[:]
   
   def outfile_a(me, path):
+    yield async.Sync(me.flush_a())
     opath, o = yield async.Sync(me._oven._outfile_a(path))
     me._outfs.append(o)
     yield async.Result(opath)
@@ -438,23 +546,47 @@ class _Context(_View):
     y = me._arg(x)
     if x not in me._argset:
       me._argset.add(x)
-      me._log.add(_tag_arg, x, y)
+      tag = _argmode_wip_tag[me._argmode(x)]
+      if tag == _tag_arg:
+        key = x
+        val = y
+      elif tag == _tag_argh:
+        key = x
+        val = valtool.Hasher().eat(y).digest()
+      elif tag in (_tag_args_wip, _tag_argsh_wip):
+        key = (x,)
+        val = {x: y}
+      else:
+        assert False
+      me._log.add(tag, key, val)
     return y
   
   def args(me, xs):
-    assert isinstance(xs, dict)
     ys = {}
-    ys1 = {}
-    for k,x in xs.iteritems():
-      ys[k] = me._arg(x)
+    xst = {_tag_arg: [], _tag_args_wip: [], _tag_argh: [], _tag_argsh_wip: []}
+    for x in xs:
+      ys[x] = me._arg(x)
       if x not in me._argset:
         me._argset.add(x)
-        ys1[x] = ys[k]
-    if len(ys1) > 0:
-      key = frozenset(ys1.iterkeys())
-      val = [y for x,y in sorted(ys1.iteritems())]
-      me._log.add(_tag_args, key, val)
+        tag = _argmode_wip_tag[me._argmode(x)]
+        xst[tag].append(x)
+    
+    for tag in (_tag_args_wip, _tag_argsh_wip):
+      if len(xst[tag]) > 0:
+        xs1 = tuple(xst[tag])
+        me._log.add(tag, xs1, dict((x,ys[x]) for x in xs1))
+    
+    for x in xst[_tag_arg]:
+      me._log.add(_tag_arg, x, ys[x])
+    
+    for x in xst[_tag_argh]:
+      me._log.add(_tag_argh, x, valtool.Hasher().eat(ys[x]).digest())
+    
     return ys
+  
+  def argstup(me, *xs):
+    a = me.args(xs)
+    return tuple(a[x] for x in xs)
   
   def __call__(me, fun_a, argmap=(lambda x,up: up(x))):
     assert argmap is not None
@@ -462,36 +594,54 @@ class _Context(_View):
       d = argmap
       argmap = lambda x,up: d[x] if x in d else up(x)
     
-    log = yield async.Sync(me._oven._memo_a(me, fun_a, argmap))
+    log = yield async.Sync(me._oven._memo_a(me._argmode, me, fun_a, argmap))
     
+    # add dependencies from subroutine to caller
     for tag,key,val in log.records():
       if tag == _tag_inp:
         if key not in me._inpset:
           me._inpset.add(key)
           me._log.add(tag, key, val)
-      elif tag == _tag_arg:
+      elif tag in (_tag_arg, _tag_argh):
         argmap(key, lambda x: me[x])
+      elif tag in (_tag_args_wip, _tag_args_db, _tag_argsh_wip, _tag_argsh_db):
+        seen = set()
+        def up(x):
+          seen.add(x)
+          return me._arg(x)
+        for x in key:
+          argmap(x, up)
+        me.args(seen)
+      else:
+        assert False
     
     yield async.Result(log.result())
-    
-  def _flush_a(me):
-    if len(me._inphold) > 0:
-      them = yield async.Sync(me._hash_inputs_a(me._inphold))
-      del me._inphold[:]
-      if False:
-        for inf in them:
-          me._log.add(_tag_inp, inf, them[inf])
-      else:
-        if len(them) > 0:
-          key = frozenset(them.iterkeys())
-          val = [h for x,h in sorted(them.iteritems())]
-          me._log.add(_tag_inps, key, val)
 
 _tag_done = 0
 _tag_inp = 1
-_tag_inps = 2
-_tag_arg = 3
-_tag_args = 4
+_tag_arg = 2
+_tag_argh = 3
+_tag_args_wip = 4
+_tag_args_db = 5
+_tag_argsh_wip = 6
+_tag_argsh_db = 7
+
+_argmode_wip_tag = { 
+  ArgMode.stored: _tag_arg,
+  ArgMode.group_stored: _tag_args_wip,
+  ArgMode.hashed: _tag_argh,
+  ArgMode.group_hashed: _tag_argsh_wip
+}
+
+_tag_keyval_check = {
+  _tag_inp: lambda k,v: type(v) is str and len(v) == 16,
+  _tag_arg: lambda k,v: True,
+  _tag_argh: lambda k,v: type(v) is str and len(v) == 16,
+  _tag_args_db: lambda k,v: type(k) is tuple and type(v) is tuple,
+  _tag_args_wip: lambda k,v: type(k) is tuple and type(v) is dict,
+  _tag_argsh_db: lambda k,v: type(k) is tuple and type(v) is str and len(v) == 16,
+  _tag_argsh_wip: lambda k,v: type(k) is tuple and type(v) is dict
+}
 
 class _Log(object):
   def __init__(me, funval):
@@ -504,6 +654,7 @@ class _Log(object):
   def add(me, tag, key, val):
     assert len(me._tags) == 0 or me._tags[-1] != _tag_done
     assert tag != _tag_done
+    assert _tag_keyval_check[tag](key, val)
     me._tags.append(tag)
     me._keys.append(key)
     me._vals.append(val)
@@ -552,39 +703,45 @@ class _LogDb(object):
     ensure_table('valbag', ('val','hash'), [['hash']])
   
   def _encode_val(me, cxn, val):
-    h = valtool.Hasher().eat(val).digest()
-    if h not in me._valenc:
-      h1 = struct.unpack_from("<i", h)[0]
-      cur = cxn.cursor()
-      cur.execute('select rowid,val from valbag where hash=?', (h1,))
-      row = None
-      for got in cur.fetchall():
-        if valtool.unpack(got[1]) == val:
-          row = got[0]
-          break
-      if row is None:
-        v = valtool.pack(val)
-        cur.execute('insert into valbag(val,hash) values(?,?)', (buffer(v),h1))
-        row = cur.lastrowid
-      me._valenc[h] = row
-      me._valdec[row] = val
-      cur.close()
-    return me._valenc[h]
+    if True:
+      h = valtool.Hasher().eat(val).digest()
+      if h not in me._valenc:
+        h1 = struct.unpack_from("<i", h)[0]
+        cur = cxn.cursor()
+        cur.execute('select rowid,val from valbag where hash=?', (h1,))
+        row = None
+        for got in cur.fetchall():
+          if valtool.unpack(got[1]) == val:
+            row = got[0]
+            break
+        if row is None:
+          v = valtool.pack(val)
+          cur.execute('insert into valbag(val,hash) values(?,?)', (buffer(v),h1))
+          row = cur.lastrowid
+        me._valenc[h] = row
+        me._valdec[row] = val
+        cur.close()
+      return me._valenc[h]
+    else:
+      return buffer(valtool.pack(val))
   
   def _decode_val(me, cxn, row):
-    if row not in me._valdec:
-      cur = cxn.cursor()
-      cur.execute('select val from valbag where rowid=?', (row,))
-      val = valtool.unpack(cur.fetchone()[0])
-      me._valdec[row] = val
-      me._valenc[valtool.Hasher().eat(val).digest()] = row
-      cur.close()
-    return me._valdec[row]
-
+    if True:
+      if row not in me._valdec:
+        cur = cxn.cursor()
+        cur.execute('select val from valbag where rowid=?', (row,))
+        val = valtool.unpack(cur.fetchone()[0])
+        me._valdec[row] = val
+        me._valenc[valtool.Hasher().eat(val).digest()] = row
+        cur.close()
+      return me._valdec[row]
+    else:
+      return valtool.unpack(row)
+  
   _sizeof_int = struct.calcsize("<i")
   
   def _split_val(me, tag, val):
-    if tag in (-1, _tag_inp): # val is a hash
+    if tag in (-1, _tag_inp, _tag_argh, _tag_argsh_db): # val is a hash
       a = struct.unpack_from("<i", val)[0]
       b = buffer(val, me._sizeof_int)
     else: # val is object
@@ -594,7 +751,7 @@ class _LogDb(object):
     return a, b
   
   def _merge_val(me, tag, a, b):
-    if tag in (-1, _tag_inp):
+    if tag in (-1, _tag_inp, _tag_argh, _tag_argsh_db):
       return struct.pack("<i", a) + str(b)
     else:
       return valtool.unpack(b)
@@ -639,13 +796,10 @@ class _LogDb(object):
           key = wip._keys[ix]
           if tag == _tag_done:
             yield async.Result(wip) # this wip computed the value we need
-          elif tag == _tag_arg:
-            val = view._arg(key)
-          elif tag == _tag_args:
-            val = view._args(key)
-          else:
-            assert tag in (_tag_inp, _tag_inps)
+          elif tag == _tag_inp:
             val = wip._vals[ix+1] # FIXME we assume MemoHost so inputs will match, this is bad
+          else:
+            val = view._arg_tagkey(tag, key)
           ix += 1
     
     def step(cxn, enstab, par, partag, val):
@@ -699,38 +853,88 @@ class _LogDb(object):
       # done computing, put in cache
       def insert(cxn, enstab, log):
         me._ensure_schema(enstab)
-        try:
-          cur = cxn.cursor()
-          ixs = range(len(log._tags))
-          par, tag = -1, -1
-          ix = -1
-          while len(ixs) > 0:
-            val = log._vals[ix+1]
-            val_a, val_b = me._split_val(tag, val)
-            cur.execute(
-              "select rowid, tagkey " +
-              "from logtrie " +
-              "where par=? and val_a=? and val_b=?",
-              (par, val_a, val_b))
-            got = cur.fetchone()
-            if got is None: break
-            
-            par, (tag, key) = got[0], me._decode_val(cxn, got[1])
-            assert tag != _tag_done
-            i = 0
-            while True:
-              assert i < len(ixs)
-              ix = ixs[i]
-              if log._tags[ix] == tag and log._keys[ix] == key:
-                break
-              i += 1
-            del ixs[i]
+        
+        # copy log._keys & log._vals so we can modify _tag_args(h) entries
+        log_tags = log._tags
+        log_keys = []
+        log_vals = [log._vals[0]]
+        for i in xrange(len(log_tags)):
+          tag = log_tags[i]
+          if tag in (_tag_args_wip, _tag_argsh_wip):
+            val = log._vals[i+1]
+            assert type(val) is dict
+            val = dict(val)
+            log_keys.append(val) # they both get the same, 'key' is only used as a set
+            log_vals.append(val)
+          else:
+            log_keys.append(log._keys[i])
+            if tag != _tag_done:
+              log_vals.append(log._vals[i+1])
+        
+        cur = cxn.cursor()
+        ixs = range(len(log._tags))
+        par, tag = -1, -1
+        val = log_vals[0]
+        assert val == funval
+        
+        while len(ixs) > 0:
+          val_a, val_b = me._split_val(tag, val)
+          cur.execute(
+            "select rowid, tagkey " +
+            "from logtrie " +
+            "where par=? and val_a=? and val_b=?",
+            (par, val_a, val_b))
+          got = cur.fetchone()
+          if got is None: break
           
-          while len(ixs) > 0:
-            val_a, val_b = me._split_val(tag, log._vals[ix+1])
-            ix = ixs[0]
-            del ixs[0]
-            tag, key = log._tags[ix], log._keys[ix]
+          par, (tag, key) = got[0], me._decode_val(cxn, got[1])
+          assert tag != _tag_done
+          if tag in (_tag_args_db, _tag_argsh_db):
+            val = dict((k,None) for k in key)
+            need = len(val)
+          
+          i = 0
+          while True:
+            assert i < len(ixs) # possible if an argmode doesn't match, bad user
+            ix = ixs[i]
+            tag1 = log_tags[ix]
+            key1 = log_keys[ix]
+            if (tag,tag1) in ((_tag_args_db,_tag_args_wip),(_tag_argsh_db,_tag_argsh_wip)):
+              for x in val:
+                if x in key1:
+                  val[x] = key1.pop(x)
+                  need -= 1
+              if len(key1) == 0:
+                del ixs[i]
+              else:
+                i += 1
+              if need == 0:
+                if tag == _tag_argsh_db:
+                  val = valtool.Hasher().eatseq(val[x] for x in key).digest()
+                else:
+                  val = tuple(val[x] for x in key)
+                break
+            elif tag1 == tag and key1 == key:
+              val = log_vals[ix+1]
+              del ixs[i]
+              break
+            else:
+              i += 1
+          
+        try:
+          for ix in ixs:
+            val_a, val_b = me._split_val(tag, val)
+            tag = log_tags[ix]
+            key = log_keys[ix]
+            if tag != _tag_done:
+              val = log_vals[ix+1]
+              if tag in (_tag_args_wip, _tag_argsh_wip):
+                assert key is val
+                tag = {_tag_args_wip:_tag_args_db, _tag_argsh_wip:_tag_argsh_db}[tag]
+                key = tuple(sorted(key))
+                val = tuple(val[x] for x in key)
+                if tag == _tag_argsh_db:
+                  val = valtool.Hasher().eatseq(val).digest()
             tagkey = me._encode_val(cxn, (tag, key))
             cur.execute(
               "insert into logtrie(par,val_a,val_b,tagkey) " +
@@ -751,108 +955,126 @@ class _LogDb(object):
     yield async.Result(log)
 
   def search_a(me, funval, match):
-    if True:
-      def step(cxn, ensure_table, par_tag_tests):
-        me._ensure_schema(ensure_table)
-        par_tagtest = {}
-        conds = ([],[])
-        binds = ([],[])
-        for par,partag,test in par_tag_tests:
-          par_tagtest[par] = (partag,test)
-          if isinstance(test, TestEqual):
-            val_a, val_b = me._split_val(partag, test._val)
-            conds[0].append("(par=? and val_a=? and val_b=?)")
-            binds[0].extend((par, val_a, val_b))
-          elif test is not TestNo:
-            conds[1].append("par=?")
-            binds[1].append(par)
-        
-        conds = conds[0] + conds[1]
-        binds = binds[0] + binds[1]
-        cur = cxn.cursor()
+    def find(cxn, enstab, par, partag, test):
+      me._ensure_schema(enstab)
+      cur = cxn.cursor()
+
+      if test is TestNo:
+        rows = ()
+      elif isinstance(test, TestEqualAny):
+        rows = []
+        for val in test.values:
+          val_a, val_b = me._split_val(partag, val)
+          cur.execute(
+            "select rowid,val_a,val_b,tagkey " +
+            "from logtrie " +
+            "where par=? and val_a=? and val_b=?",
+            (par, val_a, val_b))
+          rows += cur.fetchall()
+      else:
         cur.execute(
-          "select rowid, par, val_a, val_b, tagkey " +
+          "select rowid,val_a,val_b,tagkey " +
           "from logtrie " +
-          ("where " + " or ".join(conds) if len(conds)>0 else ""),
-          binds)
-        ans = []
-        for r in cur:
-          row, par, val_a, val_b, tagkey = r
-          partag, test = par_tagtest[par]
-          if isinstance(test, TestEqual):
-            m = test(test._val)
-          else:
-            m = test(me._merge_val(partag, val_a, val_b))
-          if m is not MatchNone:
-            tag, key = me._decode_val(cxn, tagkey)
-            ans.append((row, tag, key, m))
-        return ans
-    else:
-      def step(cxn, ensure_table, par_tag_tests):
-        me._ensure_schema(ensure_table)
-        cur = cxn.cursor()
-        ans = []
-        for par, partag, test in par_tag_tests:
-          if isinstance(test, TestEqual):
-            val_a, val_b = me._split_val(partag, test._val)
-            got = cur.execute(
-              "select rowid,val_a,val_b,tagkey " +
-              "from logtrie " +
-              "where par=? and val_a=? and val_b=?",
-              (par, val_a, val_b))
-          elif test is TestNo:
-            got = ()
-          else:
-            got = cur.execute(
-              "select rowid,val_a,val_b,tagkey " +
-              "from logtrie " +
-              "where par=?",
-              (par,))
-          for r in got:
-            row, val_a, val_b, tagkey = r
-            m = test(me._merge_val(partag, val_a, val_b))
-            if m is not MatchNone:
-              tag, key = me._decode_val(cxn, tagkey)
-              ans.append((row, tag, key, m))
-        return ans
+          "where par=?",
+          (par,))
+        rows = cur.fetchall()
       
-    """
-    class Match(object):
-      def input_a(me, x, query_host_a):
-        assert False
-      def arg(me, x):
-        assert False
-      def result(me, x):
-        assert False
-    """
+      ans = []
+      for row, val_a, val_b, tagkey in rows:
+        val = me._merge_val(partag, val_a, val_b)
+        m = test(val)
+        if m is not MatchNone:
+          tag, key = me._decode_val(cxn, tagkey)
+          ans.append((row, tag, key, m))
+      return ans
+    
     oven = me._oven
-    fings = [(-1, -1, TestEqual(funval, lambda y: match))]
-    while len(fings) > 0:
-      fings1 = yield async.Sync(oven._dbjob(
-        lambda cxn, enstab: step(cxn, enstab, fings)
-      ))
-      del fings[:]
-      rowtag = {}
-      for row,tag,key,m in fings1:
-        if tag == _tag_inp:
-          def query_a(x):
-            y = yield async.Sync(oven.query_a((x,)))
-            yield async.Result(y[x])
-          fut = yield async.Begin(m.input_a(key, query_a))
-          rowtag[fut] = (row,tag)
+    query_a = oven.query_a
+    
+    def untuple_test(test):
+      if type(test) in (TestEqualAny, TestNotEqualAll):
+        return type(test)(
+          tuple(v[0] for v in test.values),
+          lambda y: test.next_match((y,))
+        )
+      else:
+        return lambda y: test((y,))
+    
+    def hashed_test(test, tup):
+      if tup:
+        hash = lambda xs: valtool.Hasher().eatseq(xs).digest()
+      else:
+        hash = lambda x: valtool.Hasher().eat(x).digest()
+      
+      if type(test) is TestEqualAny:
+        h2v = dict((hash(v),v) for v in test.values)
+        return TestEqualAny(h2v.keys(), lambda h: test(h2v[h]))
+      elif type(test) is TestNotEqualAll:
+        hs = tuple(hash(v) for v in test.values)
+        if tup:
+          class T(tuple):
+            def __getitem__(me, i):
+              return "you should't be looking at this"
+          return TestNotEqualAll(hs, lambda h: test(T()))
         else:
-          if tag == _tag_arg:
-            test = m.arg(key)
-          elif tag == _tag_done:
-            m.result(key)
-            test = TestNo
+          return TestNotEqualAll(hs, lambda h: test("you should't be looking at this"))
+      else:
+        assert False
+    
+    def cont_found_a(fut):
+      assert fut is find_futs[0]
+      find_futs.popleft()
+      if len(find_futs) > 0:
+        futs[find_futs[0]] = (cont_found_a, find_futs[0])
+      
+      for row,tag,key,m in fut.result():
+        if tag == _tag_inp:
+          fut = yield async.Begin(m.inputs_a((key,), query_a))
+          futs[fut] = (cont_input_a, fut, row, tag, key)
+        elif tag in (_tag_arg, _tag_args_db, _tag_argh, _tag_argsh_db):
+          if tag in (_tag_args_db, _tag_argsh_db):
+            test = m.args(key)
+            if tag == _tag_argsh_db:
+              test = hashed_test(test, True)
           else:
-            assert False
-          if test is not TestNo:
-            fings.append((row, tag, test))
-      while len(rowtag) > 0:
-        fut = yield async.WaitAny(rowtag)
-        row, tag = rowtag.pop(fut)
-        test = fut.result()
-        if test is not TestNo:
-          fings.append((row, tag, test))
+            test = m.args((key,))
+            test = untuple_test(test)
+            if tag == _tag_argh:
+              test = hashed_test(test, False)
+          
+          fut = yield async.Begin(oven._dbjob(
+            (lambda row, tag, test:\
+              lambda cxn, enstab: find(cxn, enstab, row, tag, test)
+            )(row, tag, test)
+          ))
+          if len(find_futs) == 0:
+            futs[fut] = (cont_found_a, fut)
+          find_futs.append(fut)
+        else:
+          assert tag == _tag_done
+          m.result(key)
+    
+    def cont_input_a(fut, row, tag, key):
+      test = fut.result()
+      if test is not TestNo:
+        test = untuple_test(test)
+        fut = yield async.Begin(oven._dbjob(
+          lambda cxn, enstab: find(cxn, enstab, row, tag, test)
+        ))
+        if len(find_futs) == 0:
+          futs[fut] = (cont_found_a, fut)
+        find_futs.append(fut)
+    
+    fut = yield async.Begin(oven._dbjob(
+      lambda cxn, enstab: find(
+        cxn, enstab, -1, -1,
+        TestEqualAny((funval,), lambda y: match)
+      )
+    ))
+    find_futs = deque([fut])
+    futs = {fut: (cont_found_a, fut)}
+    
+    while len(futs) > 0:
+      fut = yield async.WaitAny(futs)
+      cont = futs.pop(fut)
+      yield async.Sync(cont[0](*cont[1:]))

@@ -82,14 +82,13 @@ class Hasher(object):
     def act_unk(put,s,x):
       ty = type(x)
       if ty is getattr(sys.modules[ty.__module__], ty.__name__, None):
-        put('ob.%s.%s.' % (ty.__module__, ty.__name__))
         if hasattr(x, '__getstate__'):
-          put('s.')
+          put('os.%s.%s.' % (ty.__module__, ty.__name__))
           s.append(x.__getstate__())
         else:
           fs = getattr(ty,'__slots__',None) or getattr(x,'__dict__',{}).iterkeys()
           fs = list(f for f in sorted(fs) if hasattr(x, f))
-          put('f.%x.' % len(fs))
+          put('of.%s.%s.%x.' % (ty.__module__, ty.__name__, len(fs)))
           for f in fs:
             s.append(f)
             s.append(getattr(x, f))
@@ -110,6 +109,11 @@ class Hasher(object):
     if x is not None:
       me._h.update(x)
       me._dig = None
+    return me
+  
+  def eatseq(me, xs):
+    for x in xs:
+      me.eat(x)
     return me
   
   def eat(me, x):
@@ -438,7 +442,7 @@ def _make():
     n = byt0 & (1<<sh)-1
     i = 0
     while i < nbyt:
-      n += b[p+i]<<sh
+      n += ord(b[p+i])<<sh
       sh += 8
       i += 1
     return n, p+i
