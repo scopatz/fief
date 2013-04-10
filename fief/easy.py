@@ -6,15 +6,20 @@ from repository import PackageScript
 
 def gather_envdelta(ctx, ifx):
   pkg = ctx['pkg']
-  deps = set()
+  
+  a = ctx.args(('implementor',i) for i in ifx)
+  reqs = set()
   for i,ifc in ifx.iteritems():
-    if ctx['implementor',i] == pkg:
-      for req in ifc.requires:
-        deps.add(ctx['implementor',req])
+    if a['implementor',i] == pkg:
+      reqs.update(ifc.requires)
+  
+  a = ctx.args(('implementor',req) for req in reqs)
+  deps = set(a.itervalues())
   
   ed = envdelta.EnvDelta()
+  a = ctx.args(('deliverable','envdelta',dep) for dep in deps)
   for dep in deps:
-    e = ctx['deliverable','envdelta',dep]
+    e = a['deliverable','envdelta',dep]
     if e is not None:
       ed.merge(e)
   return ed
