@@ -83,12 +83,31 @@ def deliver_a(fief, ifcs, lazy=False):
         pkg_list.append(pkg)
   topsort(pkg_deps)
   
-  # begin procuring and building
+  pkg_subsoln = {} # subsets of the solution needed by each package
+  for pkg in pkg_list:
+    sub = {}
+    for i in repo.ifcs_subs(repo.pkg_imps(pkg)):
+      sub[i] = soln[i]
+    for dep in pkg_deps.get(pkg, ()):
+      sub.update(pkg_subsoln[dep])
+    pkg_subsoln[pkg] = sub
+  
+  # begin procuring
+  pkg2pro = {}
+  pro2pkg = {}
+  for pkg in pkg_list:
+    pobj = repo.package(pkg)
+    src = pobj.source()
+    pkg2pro[pkg] = yield async.Begin(procurer.begin_a(src))
+    pro2pkg[pkg2pro[pkg]] = pkg
+  
+    
+  # begin building
   pkg2fut = {}
   fut2pkg = {}
   barrier = async.Future()
   
-  def procure_and_build_a(pkg):
+  def build_a(pkg):
     pobj = repo.package(pkg)
     src = pobj.source()
     ifx = yield async.Sync(pobj.interfaces_a(oven))
@@ -104,14 +123,16 @@ def deliver_a(fief, ifcs, lazy=False):
       dep_built[dep] = yield async.Wait(pkg2fut[dep])
     
     def argmode(x):
-      if type(x) is tuple and len(x)==2 and x[0]=='i_implement':
-        return bake.ArgMode.group_stored
+      if x == 'soln':
+        return bake.ArgMode.stored
       else:
         return bake.ArgMode.group_hashed
     
     def argget(x):
       if x == 'pkg':
         return pkg
+      elif x == 'soln':
+        return pkg_subsoln[pkg]
       elif type(x) is tuple and len(x)==2:
         if x[0]=='env':
           return os.environ.get(x[1])
@@ -121,7 +142,7 @@ def deliver_a(fief, ifcs, lazy=False):
           return pkg == soln.get(x[1])
         elif x[0]=='option':
           return fief.option(pkg, x[1])
-        elif x[0]=='dep-pkgs':
+        elif x[0]=='dep_pkgs':
           return pkg_deps.get(pkg, ())
         else:
           return None
@@ -138,7 +159,8 @@ def deliver_a(fief, ifcs, lazy=False):
     def argstest(xs, next_match):
       ys = []
       for x in xs:
-        if type(x) is tuple and len(x)==2 and x[0]=='implementor':
+        #if type(x) is tuple and len(x)==2 and x[0]=='i_implement':
+        if x == 'soln':
           if soln.get(x[1]) is not None:
             ys.append((soln[x[1]],))
           else:
@@ -158,27 +180,33 @@ def deliver_a(fief, ifcs, lazy=False):
       return bake.TestEqualAny(tups, next_match)
     
     
-    builder_a = repo.package(pkg).builder()
+    bld_a = repo.package(pkg).builder()
     opts = lambda x: fief.option(pkg, x)
     opts.__valtool_ignore__ = True
     my_ifcs = frozenset(ifx.iterkeys())
-    def build_a(ctx):
-      # register implementable interfaces for search
-      ctx.args(('i_implement',i) for i in my_ifcs)
+    def memoized_build_a(ctx):
+      ctx['soln'] # register for search
       
       path, cleanup = yield async.Sync(rest(ctx))
       try:
-        delvs = yield async.Sync(builder_a(ctx, pkg, path, opts))
+        delvs = yield async.Sync(bld_a(ctx, pkg, path, opts))
       finally:
         cleanup()
       yield async.Result(delvs)
     
     found = [] # collects tuples of (a,built) where a is a dict of arguments
-    match = bake.MatchArgs(argstest, lambda a,built: found.append((a, built)))
+    def collect(a, built):
+      ifcs = set()
+      for x in a:
+        if type(x) is tuple and len(x)==2 and x[0]=='i_implement':
+          if a[x]:
+            ifcs.add(x)
+      found.append(ifcs)
+    match = bake.MatchArgs(argstest, )
     yield async.Sync(oven.search_a(build_a, match))
     
     # time to build
-    built = yield async.Sync(oven.memo_a(build_a, argget))
+    built = yield async.Sync(oven.memo_a(memoized_build_a, argget))
     yield async.Result(built)
   
   # launch each package
@@ -195,3 +223,5 @@ def deliver_a(fief, ifcs, lazy=False):
   yield async.Result((soln, dict(
     (pkg, fut.result()) for pkg,fut in pkg2fut.items()
   )))
+
+def fatten(soln, 

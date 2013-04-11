@@ -270,11 +270,17 @@ class TestNotEqualAll(object):
   def __call__(me, y):
     return me.next_match(y) if y not in me.values else MatchNone
 
+class MatchArgs_Accept(object):
+  def __init__(me, result=None):
+    me._result = result
+
 class MatchArgs(Match):
+  Accept = object()
+  
   def __init__(me, argstest, collector):
     """accepts only inputs that match current host hash value, defers to
     argstest to generate test lambda for args.
-    argstest: takes (xs, next_match), returns tester
+    argstest: takes (args_sofar, xs, next_match), returns tester
     collector: takes ({x:y}, result) for argument name and values x,y
     """
     me._argstest = argstest
@@ -293,7 +299,13 @@ class MatchArgs(Match):
       for i in xrange(len(xs)):
         m._argmem[xs[i]] = ys[i]
       return m
-    return me._argstest(xs, next_match)
+    
+    t = me._argstest(me._argmem, xs, next_match)
+    if type(t) is MatchArgs_Accept:
+      me._collector(me._argmem, t._result)
+      return TestNo
+    else:
+      return t
   
   def result(me, ans):
     return me._collector(me._argmem, ans)
