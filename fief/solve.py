@@ -79,10 +79,14 @@ def solve(repo, ifcs):
   # modify state of solver by binding ifc to pkg, returns revert lambda if
   # successful otherwise None.
   def bind(ifc, pkg):
-    assert ifc not in bound
-    assert part[ifc] in unbound
+    i1 = part[ifc]
+    if i1 in bound:
+      if bound[i1] == pkg:
+        return lambda: None
+      else:
+        return None
     
-    reqs = repo.pkg_ifcs_reqs(pkg, part.members(ifc))
+    reqs = repo.pkg_ifcs_reqs(pkg, part.members(i1))
     revert_reqs = intro(reqs)
     if revert_reqs is None:
       return None
