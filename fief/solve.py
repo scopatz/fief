@@ -14,19 +14,16 @@ def solve(repo, ifcs):
   bound = {} # bound interface reps to packages
   unbound = set(part[i] for i in world) # interface reps not yet bound
   
-  # modify state of solver by binding ifc to pkg, returns `revert` lambda if
-  # successful, otherwise None.
-  def bind(ifc, pkg):
+  # modify state by introducing new interfaces into the world, returns revert
+  # lambda if successful, otherwise None
+  def intro(ifcs):
     assert all(i not in bound for i in unbound)
-    assert ifc not in bound
-    assert ifc in unbound
     
     part_st = part.state()
     world_adds = []
     changed = set()
     
-    reqs = repo.pkg_ifcs_reqs(pkg, part.members(ifc))
-    for i in reqs:
+    for i in ifcs:
       if i not in world:
         world.add(i)
         world_adds.append(i)
@@ -45,11 +42,6 @@ def solve(repo, ifcs):
         del bound[i]
       unbound.difference_update(unbound_adds)
       unbound.update(unbound_dels)
-    
-    bound[ifc] = pkg
-    bound_adds.add(ifc)
-    unbound.discard(ifc)
-    unbound_dels.add(ifc)
     
     for i in changed:
       if i in bound:
@@ -84,6 +76,33 @@ def solve(repo, ifcs):
     
     return revert
   
+  # modify state of solver by binding ifc to pkg, returns revert lambda if
+  # successful otherwise None.
+  def bind(ifc, pkg):
+    assert ifc not in bound
+    assert part[ifc] in unbound
+    
+    reqs = repo.pkg_ifcs_reqs(pkg, part.members(ifc))
+    revert_reqs = intro(reqs)
+    if revert_reqs is None:
+      return None
+    
+    i1 = part[ifc]
+    if i1 in bound:
+      if bound[i1] != pkg:
+        revert_reqs()
+        return None
+      else:
+        return revert_reqs
+    else:
+      bound[i1] = pkg
+      unbound.discard(i1)
+      def revert():
+        del bound[i1]
+        unbound.add(i1)
+        revert_reqs()
+      return revert
+  
   def branch():
     if len(unbound) == 0:
       # report a solution
@@ -98,11 +117,16 @@ def solve(repo, ifcs):
       i, ps = i_min, ps_min
       # bind interface to each possible package and recurse
       for p in ps:
-        revert = bind(i, p)
-        if revert is not None:
-          for x in branch():
-            yield x
-          revert()
+        least = repo.least_ifcs(i1 for i1 in repo.pkg_imps(p) if i in repo.ifc_subs(i1))
+        for i1 in least:
+          rev0 = intro((i1,))
+          if rev0 is not None:
+            rev1 = bind(i1, p)
+            if rev1 is not None:
+              for x in branch():
+                yield x
+              rev1()
+            rev0()
   
   return branch()
 

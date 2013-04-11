@@ -91,6 +91,8 @@ def deliver_a(fief, ifcs, lazy=False):
   def procure_and_build_a(pkg):
     pobj = repo.package(pkg)
     src = pobj.source()
+    ifx = yield async.Sync(pobj.interfaces_a(oven))
+    
     rest = yield async.Sync(procurer.begin_a(src))
     
     # stall until all futures are created
@@ -102,7 +104,7 @@ def deliver_a(fief, ifcs, lazy=False):
       dep_built[dep] = yield async.Wait(pkg2fut[dep])
     
     def argmode(x):
-      if type(x) is tuple and len(x)==2 and x[0]=='implementor':
+      if type(x) is tuple and len(x)==2 and x[0]=='i_implement':
         return bake.ArgMode.group_stored
       else:
         return bake.ArgMode.group_hashed
@@ -115,8 +117,12 @@ def deliver_a(fief, ifcs, lazy=False):
           return os.environ.get(x[1])
         elif x[0]=='implementor':
           return soln.get(x[1])
+        elif x[0]=='i_implement':
+          return pkg == soln.get(x[1])
         elif x[0]=='option':
           return fief.option(pkg, x[1])
+        elif x[0]=='dep-pkgs':
+          return pkg_deps.get(pkg, ())
         else:
           return None
       elif type(x) is tuple and len(x)==3:
@@ -151,7 +157,15 @@ def deliver_a(fief, ifcs, lazy=False):
       
       return bake.TestEqualAny(tups, next_match)
     
+    
+    builder_a = repo.package(pkg).builder()
+    opts = lambda x: fief.option(pkg, x)
+    opts.__valtool_ignore__ = True
+    my_ifcs = frozenset(ifx.iterkeys())
     def build_a(ctx):
+      # register implementable interfaces for search
+      ctx.args(('i_implement',i) for i in my_ifcs)
+      
       path, cleanup = yield async.Sync(rest(ctx))
       try:
         delvs = yield async.Sync(builder_a(ctx, pkg, path, opts))
@@ -163,12 +177,7 @@ def deliver_a(fief, ifcs, lazy=False):
     match = bake.MatchArgs(argstest, lambda a,built: found.append((a, built)))
     yield async.Sync(oven.search_a(build_a, match))
     
-    
     # time to build
-    builder_a = repo.package(pkg).builder()
-    opts = lambda x: fief.option(pkg, x)
-    opts.__valtool_ignore__ = True
-    
     built = yield async.Sync(oven.memo_a(build_a, argget))
     yield async.Result(built)
   

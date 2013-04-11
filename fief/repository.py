@@ -80,11 +80,14 @@ class Repo(object):
   def new_a(cls, oven, pkgs):
     pkg_ifc_reqs = {} # {(pkg,ifc):set(ifc)}
     ifcs = set()
+    pkg_imps = {}
     ifc_imps = {}
     ifc_subs = {}
     
     for pkg,pobj in pkgs.iteritems():
       ifx = yield async.Sync(pobj.interfaces_a(oven))
+      pkg_imps[pkg] = set(ifx)
+      
       for ifc in ifx:
         ifcs.add(ifc)
         
@@ -137,7 +140,8 @@ class Repo(object):
     me._pkgs = dict(pkgs)
     me._pkg_ifc_reqs = pkg_ifc_reqs
     me._ifcs = frozenset(ifcs)
-    me._ifc_imps = dict((ifc,frozenset(imps)) for ifc,imps in ifc_imps.iteritems())
+    me._ifc_imps = dict((ifc,frozenset(pkgs)) for ifc,pkgs in ifc_imps.iteritems())
+    me._pkg_imps = dict((pkg,frozenset(ifcs)) for pkg,ifcs in pkg_imps.iteritems())
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
     yield async.Result(me)
   
@@ -164,8 +168,12 @@ class Repo(object):
     return un
   
   def ifc_imps(me, ifc):
-    """Maps interface to set of packages that implements it."""
+    """Maps interface to set of packages that implements it directly or indirectly via subsumption."""
     return me._ifc_imps.get(ifc, frozenset())
+  
+  def pkg_imps(me, pkg):
+    """Maps package to set of interfaces it can directly implement."""
+    return me._pkg_imps.get(pkg, frozenset())
   
   def pkg_ifc_reqs(me, pkg, ifc):
     """Returns set of interfaces that are required if `pkg` were to implement `ifc`."""
@@ -178,3 +186,19 @@ class Repo(object):
       if (pkg,i) in me._pkg_ifc_reqs:
         un.update(me._pkg_ifc_reqs[pkg,i])
     return un
+  
+  def least_ifcs(me, ifcs):
+    """Given an iterable of interfaces, returns a set of those which are least
+    points in the subsumption heirarchy."""
+    least = set()
+    for a in ifcs:
+      dont_add = False
+      for b in tuple(least):
+        if b in me._ifc_subs[a]:
+          dont_add = True
+          break
+        elif a in me._ifc_subs[b]:
+          least.discard(b)
+      if not dont_add:
+        least.add(a)
+    return least
