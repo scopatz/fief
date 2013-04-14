@@ -27,8 +27,8 @@ class Package(object):
   def interfaces_a(me, oven):
     """returns dict ifc_name -> ifc (object)"""
     raise Exception('Not implemented.')
-  def deliverable(me, what, built):
-    """returns deliverable named 'what' from result of build"""
+  def deliverer(me):
+    """returns function (what,built) -> deliverable"""
     raise Exception('Not implemented.')
   def builder(me):
     """returns async function ctx,pkg_name,src_dir,opts ~> delivs"""
@@ -67,9 +67,12 @@ class PackageScript(Package):
       me._ns = {}
       execfile(me._py, me._ns, me._ns)
 
-  def deliverable(me, what, built):
+  def deliverer(me):
     me._ensure_ns()
-    return me._ns.get('deliverable_' + what, lambda _:None)(built)
+    ns = me._ns
+    pre = 'deliverable_'
+    d = dict((nm[len(pre):],ns[nm]) for nm in ns if nm.startswith(pre))
+    return lambda what,built: d.get(what, lambda _:None)(built)
   
   def builder(me):
     me._ensure_ns()

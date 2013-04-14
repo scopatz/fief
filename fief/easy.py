@@ -1,31 +1,55 @@
 import os
+import sys
+from itertools import chain
+
 import async
 import envdelta
 from bake import Cmd
 from repository import PackageScript
 
-def gather_envdelta(ctx, ifx):
-  pkg = ctx['pkg']
+def dependencies(ctx, pkg):
+  pkgs = set()
+  more = [pkg]
+  while len(more) > 0:
+    pkg_imps = ctx.args(('pkg_imps',p) for p in more)
+    pkg_imps = dict((p,v) for (_,p),v in pkg_imps.iteritems())
+    del more[:]
+    
+    ifcs = set(chain(*pkg_imps.values()))
+    
+    ifc_imp = ctx.args(('implementor',i) for i in ifcs)
+    ifc_imp = dict((i,v) for (_,i),v in ifc_imp.iteritems())
+    
+    pkg_ifc_reqs = ctx.args(('pkg_ifc_reqs',p,i) for i,p in ifc_imp.iteritems())
+    pkg_ifc_reqs = dict(((p,i),v) for (_,p,i),v in pkg_ifc_reqs.iteritems())
+    
+    reqs = set(chain(*pkg_ifc_reqs.values()))
+    
+    deps = ctx.args(('implementor',i) for i in reqs)
+    for p in deps.itervalues():
+      if p not in pkgs:
+        pkgs.add(p)
+        more.append(p)
   
-  a = ctx.args(('implementor',i) for i in ifx)
-  reqs = set()
-  for i,ifc in ifx.iteritems():
-    if a['implementor',i] == pkg:
-      reqs.update(ifc.requires)
-  
-  a = ctx.args(('implementor',req) for req in reqs)
-  deps = set(a.itervalues())
-  
+  return pkgs
+
+def deliverable_a(ctx, what, who):
+  built = yield async.Sync(ctx.memo_a(ctx['builder',who]))
+  yield async.Result(ctx['deliverer',who](what, built))
+
+def gather_envdelta_a(ctx):
   ed = envdelta.EnvDelta()
-  a = ctx.args(('deliverable','envdelta',dep) for dep in deps)
+  deps = dependencies(ctx, ctx.package)
+  print>>sys.stderr, 'deps=',deps
   for dep in deps:
-    e = a['deliverable','envdelta',dep]
+    e = yield async.Sync(deliverable_a(ctx, 'envdelta', dep))
     if e is not None:
       ed.merge(e)
-  return ed
+  yield async.Result(ed)
 
-def gather_env(ctx, ifx):
-  return gather_envdelta(ctx, ifx).apply(os.environ)
+def gather_env_a(ctx):
+  ed = yield async.Sync(gather_envdelta_a(ctx))
+  yield async.Result(ed.apply(os.environ))
 
 # Some convience functions
 

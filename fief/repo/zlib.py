@@ -17,12 +17,14 @@ def deliverable_envdelta(built):
 def deliverable_libs(built):
   return frozenset(['z'])
 
-def build_a(ctx, pkg, path, opts):
+def build_a(ctx):
+  pkg = ctx.package
+  path = ctx.source
   root = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
   root = os.path.abspath(root)
   os.mkdir(root)
   
-  env = easy.gather_env(ctx, interfaces)
+  env = yield async.Sync(easy.gather_env_a(ctx))
   cmdkws = {'cwd': path, 'tag': pkg, 'env': env}
   if os.name == 'nt':
     c = Cmd(ctx, **cmdkws)
@@ -44,7 +46,7 @@ def build_a(ctx, pkg, path, opts):
     yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
-    c.lit('make','-j')
+    c.lit('make','-j','4')
     yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)

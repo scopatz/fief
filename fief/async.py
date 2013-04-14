@@ -93,6 +93,10 @@ class _Future(object):
       st.wake_fut = me
       st.wake()
     me._wait_sts.clear()
+  
+  def __getstate__(me):
+    assert me._ret is not None
+    return me._ret
 
 class Future(_Future):
   def __init__(me):

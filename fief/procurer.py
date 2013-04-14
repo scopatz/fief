@@ -32,38 +32,52 @@ def canonify_source(src):
     return xs
 
 class Procurer(object):
+  __valtool_ignore__ = True
+  
   def __init__(me, stash_path):
     me._pool = async.Pool(size=4)
     me._stash = stash_path
+    me._downing = {} # maps url to Future
+    me._lock = async.Lock()
   
   def _download_a(me, url):
-    """downloads url into the stash_path if it isn't there already.
-    returns path into stash_path if successful else None.
-    """
-    def localize(url):
-      name = os.path.split(url)[-1]
-      h = urlsafe_b64encode(md5(url).digest())
-      return os.path.join(me._stash, h + '-' + name)
+    def a():
+      """downloads url into the stash_path if it isn't there already.
+      returns path into stash_path if successful else None.
+      """
+      def localize(url):
+        name = os.path.split(url)[-1]
+        h = urlsafe_b64encode(md5(url).digest())
+        return os.path.join(me._stash, h + '-' + name)
+      
+      locf = localize(url)
+      _ensure_dirs(locf)
+      
+      if not os.path.exists(locf):
+        @async.assign_pool(me._pool)
+        def task():
+          try:
+            def hook(nb, bsz, fsz):
+              if nb == 0:
+                #sys.stderr.write('downloading {0} ...\n'.format(url))
+                pass
+            sys.stderr.write('downloading {0} ...\n'.format(url))
+            urllib.urlretrieve(url, locf, hook)
+            got = locf
+            sys.stderr.write('finished    {0}\n'.format(url))
+          except urllib.ContentTooShort, e:
+            got = None
+          return got
+        got = yield async.Sync(task)
+      else:
+        got = locf
+      yield async.Result(got)
     
-    locf = localize(url)
-    _ensure_dirs(locf)
-    
-    if not os.path.exists(locf):
-      @async.assign_pool(me._pool)
-      def task():
-        try:
-          def hook(nb, bsz, fsz):
-            if nb == 0:
-              sys.stderr.write('downloading {0} ...\n'.format(url))
-          urllib.urlretrieve(url, locf, hook)
-          got = locf
-          sys.stderr.write('finished    {0}\n'.format(url))
-        except urllib.ContentTooShort, e:
-          got = None
-        return got
-      got = yield async.Sync(task)
-    else:
-      got = locf
+    yield async.Wait(me._lock.acquire())
+    if url not in me._downing:
+      me._downing[url] = yield async.Begin(a())
+    me._lock.release()
+    got = yield async.Wait(me._downing[url])
     yield async.Result(got)
   
   def begin_a(me, src):
@@ -80,6 +94,12 @@ class Procurer(object):
       def rest_a(ctx):
         yield async.Result((None, lambda:None))
       yield async.Result(rest_a)
+  
+  def procure_a(me, ctx, src):
+    """returns (path,cleanup)"""
+    rest = yield async.Sync(me.begin_a(src))
+    site, cleanup = yield async.Sync(rest(ctx))
+    yield async.Result((site, cleanup))
 
 _begin = {} # a begin method asynchronously returns either ctx~>(path,cleanup) or None
 

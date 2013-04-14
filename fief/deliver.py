@@ -82,71 +82,94 @@ def deliver_a(fief, ifcs, lazy=False):
         pkg_list.append(pkg)
   topsort(pkg_deps)
   
-  # begin procuring and building
-  pkg2fut = {}
-  fut2pkg = {}
-  barrier = async.Future()
+  def memoize(f):
+    m = {}
+    def g(*x):
+      if x not in m:
+        m[x] = f(*x)
+      return m[x]
+    return g
   
-  def procure_and_build_a(pkg):
+  @memoize
+  def package_builder(pkg):
     pobj = repo.package(pkg)
-    src = pobj.source()
-    rest = yield async.Sync(procurer.begin_a(src))
-    
-    # stall until all futures are created
-    yield async.Wait(barrier)
-    
-    # wait for all dependencies to build
-    dep_built = {}
-    for dep in pkg_deps.get(pkg, ()):
-      dep_built[dep] = yield async.Wait(pkg2fut[dep])
-    
-    # time to build
-    def args(x):
-      if x == 'pkg':
-        return pkg
-      elif type(x) is tuple and len(x)==2:
-        if x[0]=='env':
-          return os.environ.get(x[1])
-        elif x[0]=='implementor':
-          return soln.get(x[1])
-        elif x[0]=='option':
-          return fief.option(pkg, x[1])
-        else:
-          return None
-      elif type(x) is tuple and len(x)==3:
-        if x[0]=='deliverable':
-          return repo.package(x[2]).deliverable(x[1], dep_built[x[2]])
-        else:
-          return None
+    kw = {
+      'procurer': procurer,
+      'pkg': pkg,
+      'src': pobj.source(),
+      'builder_a': pobj.builder(),
+      'opts': lambda x: fief.option(pkg, x)
+    }
+    kw['opts'].__valtool_ignore__ = True
+    return _package_memo_build(**kw)
+  
+  def argmode(x):
+    return bake.ArgMode.group_hashed
+  
+  def argget(x):
+    if type(x) is tuple and len(x)==2:
+      if x[0]=='builder':
+        return package_builder(x[1])
+      elif x[0]=='deliverer':
+        return repo.package(x[1]).deliverer()
+      elif x[0]=='env':
+        return os.environ.get(x[1])
+      elif x[0]=='implementor':
+        return soln.get(x[1])
+      elif x[0]=='option':
+        return fief.option(pkg, x[1])
+      elif x[0]=='pkg_imps':
+        return repo.pkg_imps(x[1])
       else:
         return None
-    
-    builder_a = repo.package(pkg).builder()
-    opts = lambda x: fief.option(pkg, x)
-    opts.__valtool_ignore__ = True
-    
-    def build_a(ctx):
-      path, cleanup = yield async.Sync(rest(ctx))
-      try:
-        delvs = yield async.Sync(builder_a(ctx, pkg, path, opts))
-      finally:
-        cleanup()
-      yield async.Result(delvs)
-    
-    built = yield async.Sync(oven.memo_a(build_a, args))
-    yield async.Result(built)
+    elif type(x) is tuple and len(x)==3:
+      if x[0]=='pkg_ifc_reqs':
+        return repo.pkg_ifc_reqs(x[1], x[2])
+      else:
+        return None
+    else:
+      return None
   
-  # launch each package
+  # preemptively begin procures in order of first need by dependency
   for pkg in pkg_list:
-    fut = yield async.Begin(procure_and_build_a(pkg))
+    yield async.Begin(procurer.begin_a(repo.package(pkg).source()))
+  
+  # launch all package builds
+  fut2pkg = {}
+  for pkg in pkg_list:
+    bldr = package_builder(pkg)
+    fut = yield async.Begin(oven.memo_a(bldr, argget))
     fut2pkg[fut] = pkg
-    pkg2fut[pkg] = fut
-  barrier.finish() # done creating futures
   
   # wait for all packages
-  for f in fut2pkg:
-    yield async.WaitAny([f])
+  for fut in fut2pkg:
+    yield async.WaitAny([fut])
   
   yield async.Result((soln, dict(
-    (pkg, fut.result()) for pkg,fut in pkg2fut.items()
+    (pkg, fut.result()) for fut,pkg in fut2pkg.items()
   )))
+
+def _package_memo_build(procurer, pkg, src, builder_a, opts):
+  assert opts.__valtool_ignore__
+  assert procurer.__valtool_ignore__
+  
+  def build_a(ctx):
+    site, cleanup = yield async.Sync(procurer.procure_a(ctx, src))
+    
+    class WrapCtx(object):
+      package = pkg
+      source = site
+      def __getattr__(me, x):
+        return getattr(ctx, x)
+      def __getitem__(me, x):
+        return ctx[x]
+      def option(me, x):
+        return opts(x)
+    
+    try:
+      built = yield async.Sync(builder_a(WrapCtx()))
+    finally:
+      cleanup()
+    yield async.Result(built)
+  
+  return build_a

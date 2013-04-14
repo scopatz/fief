@@ -600,7 +600,10 @@ class _Context(_View):
     a = me.args(xs)
     return tuple(a[x] for x in xs)
   
-  def __call__(me, fun_a, argmap=(lambda x,up: up(x))):
+  def __call__(me, *a, **kw):
+    return me.memo_a(*a, **kw)
+  
+  def memo_a(me, fun_a, argmap=(lambda x,up: up(x))):
     assert argmap is not None
     if isinstance(argmap, dict):
       d = argmap
@@ -772,6 +775,8 @@ class _LogDb(object):
     # return: _Log
     # calc_a: _Log -> result
     
+    #print>>sys.stderr, 'funval=', _bin2hex(funval)
+    
     # check that we aren't subsumed by any wip
     disjoint = set() # set(_Log)
     while True:
@@ -793,10 +798,19 @@ class _LogDb(object):
       else: # test disjointness with wip
         ix = 0
         val = funval
+        tag = -1
+        key = None
         while True:
-          if val != wip._vals[ix]:
+          if tag == _tag_argsh_wip:
+            eqproj = lambda x: valtool.Hasher().eat(x).digest()
+          else:
+            eqproj = lambda x: x
+          
+          if eqproj(val) != eqproj(wip._vals[ix]):
+            #print>>sys.stderr, 'disjoint tag=',tag,'key=',key
             disjoint.add(wip)
             break
+          
           if ix == len(wip._tags):
             yield async.Wait(wip._bar.enlist())
           
