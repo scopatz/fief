@@ -980,7 +980,7 @@ class _LogDb(object):
     
     yield async.Result(log)
 
-  def search_a(me, funval, match):
+  def search_a(me, funtest):
     def find(cxn, enstab, par, partag, test):
       me._ensure_schema(enstab)
       cur = cxn.cursor()
@@ -1093,8 +1093,7 @@ class _LogDb(object):
     
     fut = yield async.Begin(oven._dbjob(
       lambda cxn, enstab: find(
-        cxn, enstab, -1, -1,
-        TestEqualAny((funval,), lambda y: match)
+        cxn, enstab, -1, -1, hashed_test(funtest, False)
       )
     ))
     find_futs = deque([fut])

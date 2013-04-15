@@ -30,6 +30,7 @@ def main(ns, rcpath):
   try:
     async.run(top_a())
   except Exception, e:
-    sys.stderr.write(str(e.async_traceback) + '\n')
+    if hasattr(e, 'async_traceback'):
+      sys.stderr.write(str(e.async_traceback) + '\n')
     raise
   return 0

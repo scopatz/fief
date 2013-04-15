@@ -8,24 +8,22 @@ from bake import Cmd
 from repository import PackageScript
 
 def dependencies(ctx, pkg):
+  def args_notag(xs):
+    a = ctx.args(xs)
+    return dict((x[1:] if len(x)>2 else x[1], y) for x,y in a.iteritems())
+  
   pkgs = set()
   more = [pkg]
   while len(more) > 0:
-    pkg_imps = ctx.args(('pkg_imps',p) for p in more)
-    pkg_imps = dict((p,v) for (_,p),v in pkg_imps.iteritems())
+    pkg_imps = args_notag(('pkg_imps',p) for p in more)
     del more[:]
     
     ifcs = set(chain(*pkg_imps.values()))
-    
-    ifc_imp = ctx.args(('implementor',i) for i in ifcs)
-    ifc_imp = dict((i,v) for (_,i),v in ifc_imp.iteritems())
-    
-    pkg_ifc_reqs = ctx.args(('pkg_ifc_reqs',p,i) for i,p in ifc_imp.iteritems())
-    pkg_ifc_reqs = dict(((p,i),v) for (_,p,i),v in pkg_ifc_reqs.iteritems())
-    
+    ifc_imp = args_notag(('implementor',i) for i in ifcs)
+    pkg_ifc_reqs = args_notag(('pkg_ifc_reqs',p,i) for i,p in ifc_imp.iteritems())
     reqs = set(chain(*pkg_ifc_reqs.values()))
-    
     deps = ctx.args(('implementor',i) for i in reqs)
+    
     for p in deps.itervalues():
       if p not in pkgs:
         pkgs.add(p)
@@ -33,14 +31,13 @@ def dependencies(ctx, pkg):
   
   return pkgs
 
-def deliverable_a(ctx, what, who):
-  built = yield async.Sync(ctx.memo_a(ctx['builder',who]))
-  yield async.Result(ctx['deliverer',who](what, built))
+def deliverable_a(ctx, what, pkg):
+  built = yield async.Sync(ctx.memo_a(ctx['builder',pkg]))
+  yield async.Result(ctx['deliverer',pkg](what, built))
 
 def gather_envdelta_a(ctx):
   ed = envdelta.EnvDelta()
   deps = dependencies(ctx, ctx.package)
-  print>>sys.stderr, 'deps=',deps
   for dep in deps:
     e = yield async.Sync(deliverable_a(ctx, 'envdelta', dep))
     if e is not None:

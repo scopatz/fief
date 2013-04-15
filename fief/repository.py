@@ -128,11 +128,11 @@ class Repo(object):
           ifc_imps[b] = set()
         ifc_imps[b].update(ifc_imps.get(a, ()))
     
-    # to require an interface a is to also require all the interfaces it subsumes
-    for (pkg,ifc),reqs in pkg_ifc_reqs.iteritems():
-      for req in tuple(reqs):
-        reqs.update(ifc_subs.get(req, ()))
-      assert ifc not in reqs
+    ## to require an interface a is to also require all the interfaces it subsumes
+    #for (pkg,ifc),reqs in pkg_ifc_reqs.iteritems():
+    #  for req in tuple(reqs):
+    #    reqs.update(ifc_subs.get(req, ()))
+    #  assert ifc not in reqs
     
     # requirements subsume
     for (pkg,a),reqs in pkg_ifc_reqs.iteritems():
@@ -179,7 +179,8 @@ class Repo(object):
     return me._pkg_imps.get(pkg, frozenset())
   
   def pkg_ifc_reqs(me, pkg, ifc):
-    """Returns set of interfaces that are required if `pkg` were to implement `ifc`."""
+    """Returns set of interfaces that are required if `pkg` were to implement `ifc`.
+    Returned set of interfaces not closed under subsumption."""
     return me._pkg_ifc_reqs.get((pkg,ifc), frozenset())
   
   def pkg_ifcs_reqs(me, pkg, ifcs):

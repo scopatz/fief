@@ -5,6 +5,7 @@ import shutil
 import subprocess
 
 import async
+import easy
 import fief
 import solve
 
@@ -130,7 +131,7 @@ def deliver_a(fief, ifcs, lazy=False):
     else:
       return None
   
-  # preemptively begin procures in order of first need by dependency
+  # preemptively begin procurements in dependency order
   for pkg in pkg_list:
     yield async.Begin(procurer.begin_a(repo.package(pkg).source()))
   
@@ -154,22 +155,30 @@ def _package_memo_build(procurer, pkg, src, builder_a, opts):
   assert procurer.__valtool_ignore__
   
   def build_a(ctx):
+    # wait for all dependency packages to build before we untar source
+    deps = easy.dependencies(ctx, pkg)
+    for dep in deps:
+      yield async.Sync(ctx.memo_a(ctx['builder',dep]))
+    
+    # procure our source
     site, cleanup = yield async.Sync(procurer.procure_a(ctx, src))
     
-    class WrapCtx(object):
-      package = pkg
-      source = site
-      def __getattr__(me, x):
-        return getattr(ctx, x)
-      def __getitem__(me, x):
-        return ctx[x]
-      def option(me, x):
-        return opts(x)
-    
+    # now build
     try:
+      class WrapCtx(object):
+        package = pkg
+        source = site
+        def __getattr__(me, x):
+          return getattr(ctx, x)
+        def __getitem__(me, x):
+          return ctx[x]
+        def option(me, x):
+          return opts(x)
+
       built = yield async.Sync(builder_a(WrapCtx()))
     finally:
       cleanup()
+
     yield async.Result(built)
   
   return build_a
