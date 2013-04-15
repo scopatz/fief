@@ -270,14 +270,10 @@ class TestNotEqualAll(object):
   def __call__(me, y):
     return me.next_match(y) if y not in me.values else MatchNone
 
-class MatchArgs_Accept(object):
-  def __init__(me, result=None):
-    me._result = result
-
 class MatchArgs(Match):
   Accept = object()
   
-  def __init__(me, argstest, collector):
+  def __init__(me, argstest, collector, argstore=lambda hist,x,y: hist.__setitem__(x,y)):
     """accepts only inputs that match current host hash value, defers to
     argstest to generate test lambda for args.
     argstest: takes (args_sofar, xs, next_match), returns tester
@@ -285,6 +281,7 @@ class MatchArgs(Match):
     """
     me._argstest = argstest
     me._collector = collector
+    me._argstore = argstore
     me._argmem = {}
   
   def inputs_a(me, xs, query_a):
@@ -294,18 +291,12 @@ class MatchArgs(Match):
   
   def args(me, xs):
     def next_match(ys):
-      m = MatchArgs(me._argstest, me._collector)
+      m = MatchArgs(me._argstest, me._collector, me._argstore)
       m._argmem.update(me._argmem)
       for i in xrange(len(xs)):
-        m._argmem[xs[i]] = ys[i]
+        me._argstore(m._argmem, xs[i], ys[i])
       return m
-    
-    t = me._argstest(me._argmem, xs, next_match)
-    if type(t) is MatchArgs_Accept:
-      me._collector(me._argmem, t._result)
-      return TestNo
-    else:
-      return t
+    return me._argstest(me._argmem, xs, next_match)
   
   def result(me, ans):
     return me._collector(me._argmem, ans)
@@ -413,9 +404,8 @@ class Oven(object):
     log = yield async.Sync(me._memo_a(argmode, None, fun_a, argmap))
     yield async.Result(log.result()) # will throw if fun_a did, but thats ok
   
-  def search_a(me, fun_a, match):
-    funval = valtool.Hasher().eat(fun_a).digest()
-    return me._logdb.search_a(funval, match)
+  def search_a(me, funtest):
+    return me._logdb.search_a(funtest)
 
 class _Stash(object):
   def __init__(me, oven):
@@ -756,6 +746,7 @@ class _LogDb(object):
   _sizeof_int = struct.calcsize("<i")
   
   def _split_val(me, tag, val):
+    assert tag not in (_tag_args_wip, _tag_argsh_wip)
     if tag in (-1, _tag_inp, _tag_argh, _tag_argsh_db): # val is a hash
       a = struct.unpack_from("<i", val)[0]
       b = buffer(val, me._sizeof_int)
@@ -766,6 +757,7 @@ class _LogDb(object):
     return a, b
   
   def _merge_val(me, tag, a, b):
+    assert tag not in (_tag_args_wip, _tag_argsh_wip)
     if tag in (-1, _tag_inp, _tag_argh, _tag_argsh_db):
       return struct.pack("<i", a) + str(b)
     else:
@@ -1040,7 +1032,7 @@ class _LogDb(object):
         if tup:
           class T(tuple):
             def __getitem__(me, i):
-              return "you should't be looking at this"
+              raise Exception("you should't be looking at this")
           return TestNotEqualAll(hs, lambda h: test(T()))
         else:
           return TestNotEqualAll(hs, lambda h: test("you should't be looking at this"))

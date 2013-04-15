@@ -21,11 +21,16 @@ class Fief(object):
     me._deft_ifcs = frozenset(conf.get('interfaces', frozenset()))
     me._prefs = conf.get('preferences', {})
     me._opts = conf.get('options', lambda pkg,x: None)
-    me._pkgs = conf.get('packages', {})
-
+    me.packages = conf.get('packages', {})
+    
     me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
     me.oven = bake.Oven(bake.MemoHost(bake.FileHost), os.path.join(me._path_stash, 'oven'))
-    me.repo = yield async.Sync(repository.Repo.new_a(me.oven, me._pkgs))
+    
+    pkg_ifx = {}
+    for pkg,pobj in me.packages.iteritems():
+      pkg_ifx[pkg] = yield async.Sync(pobj.interfaces_a(me.oven))
+    
+    me.repo = repository.Repo(pkg_ifx)
     
     yield async.Result(me)
   

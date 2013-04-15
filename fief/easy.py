@@ -125,4 +125,9 @@ packages = {
   'sys_py': PackageScript(None, p('sys_py.py')),
   'zlib': PackageScript('http://zlib.net/zlib-1.2.7.tar.gz', p('zlib.py')),
   }
+packages={
+  'hdf5': PackageScript('http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2', p('hdf5.py')),
+  'sys_cc': PackageScript(None, p('sys_cc.py')),
+  'zlib': PackageScript('http://zlib.net/zlib-1.2.7.tar.gz', p('zlib.py')),
+}
 del p, repopath

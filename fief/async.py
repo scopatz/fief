@@ -147,8 +147,8 @@ def run(a):
     if poo.ref_pool() is None: return
     lock.acquire()
     while True:
-      while len(poo.jobs) > 0:
-        while len(poo.jobs) > 0:
+      while not closure.quitting and len(poo.jobs) > 0:
+        while not closure.quitting and len(poo.jobs) > 0:
           fut, job = poo.jobs.popleft()
           lock.release()
           try:
@@ -323,7 +323,14 @@ def run(a):
   while not closure.quitting:
     awaken()
     if closure.quitting: break
-    cv_main.wait()
+    try:
+      cv_main.wait()
+    except:
+      closure.quitting = True
+      for poo in pool_sts.values():
+        poo.cv.notify_all()
+      lock.release()
+      raise
   lock.release()
   return top.result()
 

@@ -1,3 +1,4 @@
+import sys
 
 def solve(repo, ifcs):
   """Returns an iterable of dicts that map interfaces to packages.
@@ -28,6 +29,9 @@ def solve(repo, ifcs):
         world.add(i)
         world_adds.append(i)
         for s in repo.ifc_subs(i):
+          if s not in world:
+            world.add(s)
+            world_adds.append(s)
           if part[i] != part[s]:
             changed.update(part.members(part.merge(i, s)))
     

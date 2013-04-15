@@ -1,34 +1,19 @@
 from nose.tools import assert_equal, assert_raises
 
 import os
-from fief import async
 from fief.solve import solve, DisjointSets
 from fief.repository import Repo, Package, ifc
 
-class MockPackage(Package):
-  """A package class with an alternate interfaces_a() for testing."""
-
-  def __init__(me, ifx=None):
-    super(MockPackage, me).__init__()
-    me._ifx = ifx or {}
-
-  def interfaces_a(me, oven):
-    yield async.Result(me._ifx)
-
-def run_async(f):
-  def test_runner():
-    async.run(f())
-  return test_runner
+def MockPackage(ifx):
+  return ifx
 
 # destroy order! chaos reigns!
 sditems = lambda x: set(frozenset(d.iteritems()) for d in x)
 
 def check_case(nm, pkgs, ifcs, exp):
-  def a():
-    repo = yield async.Sync(Repo.new_a(None, pkgs))
-    obs = sditems(solve(repo, ifcs))
-    assert_equal(obs, sditems(exp))
-  async.run(a())
+  repo = Repo(pkgs)
+  obs = sditems(solve(repo, ifcs))
+  assert_equal(obs, sditems(exp))
 
 cases = (
 # 1 pkg, no deps

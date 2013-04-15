@@ -79,17 +79,16 @@ class PackageScript(Package):
     return me._ns['build_a']
 
 class Repo(object):
-  @classmethod
-  def new_a(cls, oven, pkgs):
+  def __init__(me, pkgs):
+    """pkgs: {pkg-name: {ifc-name: ifc-object}}"""
     pkg_ifc_reqs = {} # {(pkg,ifc):set(ifc)}
     ifcs = set()
     pkg_imps = {}
     ifc_imps = {}
     ifc_subs = {}
     
-    for pkg,pobj in pkgs.iteritems():
-      ifx = yield async.Sync(pobj.interfaces_a(oven))
-      pkg_imps[pkg] = set(ifx)
+    for pkg,ifx in pkgs.iteritems():
+      pkg_imps[pkg] = ifx
       
       for ifc in ifx:
         ifcs.add(ifc)
@@ -121,7 +120,8 @@ class Repo(object):
           changed = changed or len0 != len(asubs)
       if not changed: break
     
-    # if a subsumes b, then anyone who implements a also implements b
+    # if a subsumes b, then anyone who implements a also implements b.
+    # we are purposely not updating pkg_imps, it should not be closed.
     for a in ifc_subs:
       for b in ifc_subs[a]:
         if b not in ifc_imps:
@@ -139,20 +139,15 @@ class Repo(object):
       for b in ifc_subs[a]:
         reqs.update(pkg_ifc_reqs.get((pkg,b), ()))
     
-    me = cls()
-    me._pkgs = dict(pkgs)
+    me._pkgs = frozenset(pkgs)
     me._pkg_ifc_reqs = pkg_ifc_reqs
     me._ifcs = frozenset(ifcs)
     me._ifc_imps = dict((ifc,frozenset(pkgs)) for ifc,pkgs in ifc_imps.iteritems())
-    me._pkg_imps = dict((pkg,frozenset(ifcs)) for pkg,ifcs in pkg_imps.iteritems())
+    me._pkg_imps = pkg_imps
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
-    yield async.Result(me)
   
   def packages(me):
     return me._pkgs
-  
-  def package(me, pkg):
-    return me._pkgs[pkg]
   
   def interfaces(me):
     return me._ifcs
@@ -175,8 +170,8 @@ class Repo(object):
     return me._ifc_imps.get(ifc, frozenset())
   
   def pkg_imps(me, pkg):
-    """Maps package to set of interfaces it can directly implement."""
-    return me._pkg_imps.get(pkg, frozenset())
+    """Maps package to set of interfaces dictionary it can directly implement."""
+    return me._pkg_imps.get(pkg, {})
   
   def pkg_ifc_reqs(me, pkg, ifc):
     """Returns set of interfaces that are required if `pkg` were to implement `ifc`.

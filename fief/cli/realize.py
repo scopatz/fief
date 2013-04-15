@@ -19,7 +19,7 @@ def main(ns, rcpath):
     
     ed = EnvDelta()
     for pkg,built in pkg2built.iteritems():
-      e = finst.repo.package(pkg).deliverer()('envdelta', built)
+      e = finst.packages[pkg].deliverer()('envdelta', built)
       if e is not None:
         ed.merge(e)
     
