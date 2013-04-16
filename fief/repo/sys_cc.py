@@ -1,7 +1,9 @@
 from fief import async
-from fief.repository import ifc
+from fief.repository import Imp
 
-interfaces = {'cc': ifc()}
+implements = {
+  'cc': Imp()
+}
 
 def build_a(ctx):
   yield async.Result(None)

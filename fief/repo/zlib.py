@@ -1,8 +1,10 @@
 import os
 import shutil
-from fief import async, Cmd, easy, EnvDelta, ifc
+from fief import async, Cmd, easy, EnvDelta, Imp
 
-interfaces = {'zlib': ifc(requires='cc')}
+implements = {
+  'zlib': Imp(requires='cc')
+}
 
 def deliverable_envdelta(built):
   root = built
@@ -21,7 +23,6 @@ def build_a(ctx):
   pkg = ctx.package
   path = ctx.source
   root = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
-  root = os.path.abspath(root)
   os.mkdir(root)
   
   env = yield async.Sync(easy.gather_env_a(ctx))
@@ -43,14 +44,14 @@ def build_a(ctx):
   else:
     c = Cmd(ctx, **cmdkws)
     c.lit('./configure', '--prefix=' + root)
-    #yield async.Sync(c.exec_a())
+    yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
-    c.lit('make','-j','4')
-    #yield async.Sync(c.exec_a())
+    c.lit('make', ctx.option('make-opt-parallel'))
+    yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
     c.lit('make','install')
-    #yield async.Sync(c.exec_a())
+    yield async.Sync(c.exec_a())
   
   yield async.Result(root)

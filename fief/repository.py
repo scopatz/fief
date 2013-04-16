@@ -2,17 +2,16 @@ import os
 import sys
 
 import async
-import envdelta
 
 ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
 
-class ifc(object):
+class Imp(object):
   def __init__(me, subsumes=(), requires=()):
     me.subsumes = ensure_frozenset(subsumes)
     me.requires = ensure_frozenset(requires)
   
   def __repr__(self):
-    s = "ifc(subsumes={0!r}, requires={1!r})"
+    s = "Imp(subsumes={0!r}, requires={1!r})"
     return s.format(self.subsumes, self.requires)
   
   def __getstate__(me):
@@ -24,73 +23,31 @@ class ifc(object):
 class Package(object):
   def source(me):
     raise Exception('Not implemented.')
-  def interfaces_a(me, oven):
-    """returns dict ifc_name -> ifc (object)"""
+  
+  def implements_a(me, oven):
+    """returns {ifc: Imp}"""
     raise Exception('Not implemented.')
+  
   def deliverer(me):
     """returns function (what,built) -> deliverable"""
     raise Exception('Not implemented.')
+  
   def builder(me):
-    """returns async function ctx,pkg_name,src_dir,opts ~> delivs"""
+    """returns async function ctx ~> built"""
     raise Exception('Not implemented.')
 
-class PackageScript(Package):
-  def __init__(me, source, py_file):
-    me._src = source
-    me._py = py_file
-    me._ifx = None
-    me._ns = None
-  
-  def source(me):
-    return me._src
-  
-  def interfaces_a(me, oven):
-    box = [None]
-    def load_ifx_a(ctx):
-      py = ctx['py']
-      ctx.infile(py)
-      box[0] = {}
-      execfile(py, box[0], box[0])
-      yield async.Result(box[0]['interfaces'])
-    
-    if me._ifx is None:
-      if me._ns is None:
-        me._ifx = yield async.Sync(oven.memo_a(load_ifx_a, {'py':me._py}))
-        me._ns = box[0]
-      else:
-        me._ifx = me._ns['interfaces']
-    
-    yield async.Result(me._ifx)
-  
-  def _ensure_ns(me):
-    if me._ns is None:
-      me._ns = {}
-      execfile(me._py, me._ns, me._ns)
-
-  def deliverer(me):
-    me._ensure_ns()
-    ns = me._ns
-    pre = 'deliverable_'
-    d = dict((nm[len(pre):],ns[nm]) for nm in ns if nm.startswith(pre))
-    return lambda what,built: d.get(what, lambda _:None)(built)
-  
-  def builder(me):
-    me._ensure_ns()
-    return me._ns['build_a']
-
 class Repo(object):
-  def __init__(me, pkgs):
-    """pkgs: {pkg-name: {ifc-name: ifc-object}}"""
+  def __init__(me, pkg_imps):
+    """pkg_imps: {pkg: {ifc: Imp}}"""
     pkg_ifc_reqs = {} # {(pkg,ifc):set(ifc)}
     ifcs = set()
-    pkg_imps = {}
+    pkg_imps = dict(pkg_imps)
     ifc_imps = {}
     ifc_subs = {}
+    ifc_bigs = {}
     
-    for pkg,ifx in pkgs.iteritems():
-      pkg_imps[pkg] = ifx
-      
-      for ifc in ifx:
+    for pkg,imps in pkg_imps.iteritems():
+      for ifc,imp in imps.iteritems():
         ifcs.add(ifc)
         
         if ifc not in ifc_imps:
@@ -99,9 +56,9 @@ class Repo(object):
         
         if ifc not in ifc_subs:
           ifc_subs[ifc] = set([ifc])
-        ifc_subs[ifc].update(ifx[ifc].subsumes)
+        ifc_subs[ifc].update(imp.subsumes)
         
-        pkg_ifc_reqs[pkg,ifc] = set(ifx[ifc].requires)
+        pkg_ifc_reqs[pkg,ifc] = set(imp.requires)
         
         ifcs.update(ifc_subs[ifc])
         ifcs.update(pkg_ifc_reqs[pkg,ifc])
@@ -119,6 +76,13 @@ class Repo(object):
           asubs.update(ifc_subs[b])
           changed = changed or len0 != len(asubs)
       if not changed: break
+    
+    # inverse ifc_subs
+    for a in ifc_subs:
+      for b in ifc_subs[a]:
+        if b not in ifc_bigs:
+          ifc_bigs[b] = set()
+        ifc_bigs[b].add(a)
     
     # if a subsumes b, then anyone who implements a also implements b.
     # we are purposely not updating pkg_imps, it should not be closed.
@@ -139,12 +103,13 @@ class Repo(object):
       for b in ifc_subs[a]:
         reqs.update(pkg_ifc_reqs.get((pkg,b), ()))
     
-    me._pkgs = frozenset(pkgs)
+    me._pkg_imps = pkg_imps
+    me._pkgs = frozenset(pkg_imps)
     me._pkg_ifc_reqs = pkg_ifc_reqs
     me._ifcs = frozenset(ifcs)
     me._ifc_imps = dict((ifc,frozenset(pkgs)) for ifc,pkgs in ifc_imps.iteritems())
-    me._pkg_imps = pkg_imps
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
+    me._ifc_bigs = dict((ifc,frozenset(bigs)) for ifc,bigs in ifc_bigs.iteritems())
   
   def packages(me):
     return me._pkgs
@@ -152,12 +117,12 @@ class Repo(object):
   def interfaces(me):
     return me._ifcs
   
-  def ifc_subs(me, ifc):
+  def ifc_subsets(me, ifc):
     """Maps interface to set of interfaces it subsumes, not necessarily 
     closed under transitivity."""
     return me._ifc_subs.get(ifc, frozenset())
   
-  def ifcs_subs(me, ifcs):
+  def ifcs_subsets(me, ifcs):
     """union(ifc_subs(i) for i in ifcs)"""
     un = set()
     for i in ifcs:
@@ -165,20 +130,23 @@ class Repo(object):
         un.update(me._ifc_subs[i])
     return un
   
-  def ifc_imps(me, ifc):
+  def ifc_subsumers(me, ifc):
+    return me._ifc_bigs.get(ifc, frozenset())
+  
+  def ifc_implementors(me, ifc):
     """Maps interface to set of packages that implements it directly or indirectly via subsumption."""
     return me._ifc_imps.get(ifc, frozenset())
   
-  def pkg_imps(me, pkg):
-    """Maps package to set of interfaces dictionary it can directly implement."""
+  def pkg_implements(me, pkg):
+    """Maps package to ifc->Imp dictionary."""
     return me._pkg_imps.get(pkg, {})
   
-  def pkg_ifc_reqs(me, pkg, ifc):
+  def pkg_ifc_requires(me, pkg, ifc):
     """Returns set of interfaces that are required if `pkg` were to implement `ifc`.
     Returned set of interfaces not closed under subsumption."""
     return me._pkg_ifc_reqs.get((pkg,ifc), frozenset())
   
-  def pkg_ifcs_reqs(me, pkg, ifcs):
+  def pkg_ifcs_requires(me, pkg, ifcs):
     """union(pkg_ifc_subs(pkg,i) for i in ifcs)"""
     un = set()
     for i in ifcs:

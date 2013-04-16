@@ -3,9 +3,120 @@ import sys
 from itertools import chain
 
 import async
-import envdelta
+
 from bake import Cmd
-from repository import PackageScript
+from envdelta import EnvDelta
+from repository import Imp, Package
+
+class PackageSys(Package):
+  def __init__(me, ifc):
+    me._ifc = ifc
+  
+  def source(me):
+    return None
+  
+  def implements_a(me, oven):
+    yield async.Result({me._ifc: Imp()})
+  
+  def deliverer(me):
+    return lambda what,built: None
+  
+  def builder(me):
+    def build_a(ctx):
+      yield async.Result(None)
+    return build_a
+
+class PackageScript(Package):
+  def __init__(me, source, py_file):
+    me._src = source
+    me._py = py_file
+    me._imps = None
+    me._ns = None
+  
+  def source(me):
+    return me._src
+  
+  def implements_a(me, oven):
+    box = [None]
+    def load_imps_a(ctx):
+      py = ctx['py']
+      ctx.infile(py)
+      box[0] = {}
+      execfile(py, box[0], box[0])
+      yield async.Result(box[0]['implements'])
+    
+    if me._imps is None:
+      if me._ns is None:
+        me._imps = yield async.Sync(oven.memo_a(load_imps_a, {'py':me._py}))
+        me._ns = box[0]
+      else:
+        me._imps = me._ns['implements']
+    
+    yield async.Result(me._imps)
+  
+  def _ensure_ns(me):
+    if me._ns is None:
+      me._ns = {}
+      execfile(me._py, me._ns, me._ns)
+
+  def deliverer(me):
+    me._ensure_ns()
+    ns = me._ns
+    pre = 'deliverable_'
+    d = dict((nm[len(pre):],ns[nm]) for nm in ns if nm.startswith(pre))
+    return lambda what,built: d.get(what, lambda _:None)(built)
+  
+  def builder(me):
+    me._ensure_ns()
+    return me._ns['build_a']
+
+class PackageConfMakeInstall(Package):
+  def __init__(me, source, imps, lib=None):
+    me._src = source
+    me._imps = imps
+    me._lib = lib
+  
+  def source(me):
+    return me._src
+  
+  def implements_a(me, oven):
+    yield async.Result(me._imps)
+  
+  def deliverer(me):
+    def delv(what, built):
+      if what == 'envdelta':
+        return c_envdelta(built['root'])
+      else:
+        return built.get(what)
+    return delv
+  
+  def builder(me):
+    lib = me._lib
+    
+    def build_a(ctx):
+      root = yield async.Sync(ctx.outfile_a(os.path.join('build', ctx.package)))
+      os.mkdir(root)
+      
+      env = yield async.Sync(gather_env_a(ctx))
+      cmdkws = {'cwd': ctx.source, 'tag': ctx.package, 'env': env}
+      
+      c = Cmd(ctx, **cmdkws)
+      c.lit('./configure', '--prefix=' + root)
+      yield async.Sync(c.exec_a())
+      
+      c = Cmd(ctx, **cmdkws)
+      c.lit('make', ctx.option('make-opt-parallel'))
+      yield async.Sync(c.exec_a())
+      
+      c = Cmd(ctx, **cmdkws)
+      c.lit('make','install')
+      yield async.Sync(c.exec_a())
+      
+      libs = (lib,) if lib is not None else ()
+      yield async.Result({'root':root, 'libs':libs})
+    
+    return build_a
+
 
 def dependencies(ctx, pkg):
   def args_notag(xs):
@@ -15,12 +126,12 @@ def dependencies(ctx, pkg):
   pkgs = set()
   more = [pkg]
   while len(more) > 0:
-    pkg_imps = args_notag(('pkg_imps',p) for p in more)
+    pkg_imps = args_notag(('pkg_implements',p) for p in more)
     del more[:]
     
     ifcs = set(chain(*pkg_imps.values()))
     ifc_imp = args_notag(('implementor',i) for i in ifcs)
-    pkg_ifc_reqs = args_notag(('pkg_ifc_reqs',p,i) for i,p in ifc_imp.iteritems())
+    pkg_ifc_reqs = args_notag(('pkg_ifc_requires',p,i) for i,p in ifc_imp.iteritems())
     reqs = set(chain(*pkg_ifc_reqs.values()))
     deps = ctx.args(('implementor',i) for i in reqs)
     
@@ -36,7 +147,7 @@ def deliverable_a(ctx, what, pkg):
   yield async.Result(ctx['deliverer',pkg](what, built))
 
 def gather_envdelta_a(ctx):
-  ed = envdelta.EnvDelta()
+  ed = EnvDelta()
   deps = dependencies(ctx, ctx.package)
   for dep in deps:
     e = yield async.Sync(deliverable_a(ctx, 'envdelta', dep))
@@ -48,61 +159,29 @@ def gather_env_a(ctx):
   ed = yield async.Sync(gather_envdelta_a(ctx))
   yield async.Result(ed.apply(os.environ))
 
-# Some convience functions
-
-def configure_make_make_install(ifx=None, libs=None):
-  ifx = ifx or {}
-  def build_a(ctx, pkg, src, opts):
-    root = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
-    root = os.path.abspath(root)
-    os.mkdir(root)
-
-    env = gather_env(ctx, ifx)
-    cmdkws = {'cwd': src, 'tag': pkg, 'env': env}
-
-    c = Cmd(ctx, **cmdkws)
-    c.lit('./configure', '--prefix=' + root)
-    yield async.Sync(c.exec_a())
-
-    c = Cmd(ctx, **cmdkws)
-    c.lit('make', '-j', '3')
-    yield async.Sync(c.exec_a())
-
-    c = Cmd(ctx, **cmdkws)
-    c.lit('make', 'install')
-    yield async.Sync(c.exec_a())
-
-    built = {'root': root, 'pkg': pkg, 'libs': libs or set()}
-    yield async.Result(built)
-  return build_a
-
-def _addwhendir(sets, key, d):
-  val = set(sets.get(key, ()))
-  if os.path.isdir(d):
-    val.add(d)
-  if 0 < len(val):
-    sets[key] = val
-
-def c_envdelta(built):
-  root = built['root']
-  sets={}
-  _addwhendir(sets, 'PATH', os.path.join(root, 'bin'))
-  _addwhendir(sets, 'CPATH', os.path.join(root, 'include'))
-  _addwhendir(sets, 'LD_LIBRARY_PATH', os.path.join(root, 'lib'))
-  _addwhendir(sets, 'PKG_CONFIG_PATH', os.path.join(root, 'lib', 'pkgconfig'))
-  _addwhendir(sets, 'MANPATH', os.path.join(root, 'share', 'man'))
-  return envdelta.EnvDelta(sets=sets)  
+def c_envdelta(root):
+  sets = { var: path for var,path in {
+      'PATH': os.path.join(root, 'bin'),
+      'CPATH': os.path.join(root, 'include'),
+      'LD_LIBRARY_PATH': os.path.join(root, 'lib'),
+      'PKG_CONFIG_PATH': os.path.join(root, 'lib', 'pkgconfig'),
+      'MANPATH': os.path.join(root, 'share', 'man'),
+    }.iteritems() if os.path.isdir(path)
+  }
+  return EnvDelta(sets=sets)
 
 def find_libs(built):
   root = built['root']
   # FIXME posix only
-  files =glob(os.path.join(root, '*',  'lib*.[alos][oa]?'))
+  files = glob(os.path.join(root, '*',  'lib*.[alos][oa]?'))
   return set([os.path.split(f)[1][3:].rsplit('.', 1) for f in files])
 
 
 # Set up default packages repo
 repopath = os.path.join(os.path.split(__file__)[0], 'repo')
 p = lambda x: os.path.join(repopath, x)
+
+# keeping this around as reference, it is overwritten below
 packages = {
   'atlas': PackageScript('http://sourceforge.net/projects/math-atlas/files/Stable/3.10.1/atlas3.10.1.tar.bz2/download', p('atlas.py')),
   'bzip2': PackageScript('http://www.bzip.org/1.0.6/bzip2-1.0.6.tar.gz', p('bzip2.py')),
@@ -125,10 +204,27 @@ packages = {
   'sys_py': PackageScript(None, p('sys_py.py')),
   'zlib': PackageScript('http://zlib.net/zlib-1.2.7.tar.gz', p('zlib.py')),
   }
-packages={
-  'hdf5': PackageScript('http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2', p('hdf5.py')),
-  'mpich': PackageScript('http://www.mpich.org/static/tarballs/3.0.1/mpich-3.0.1.tar.gz', p('mpich.py')),
-  'sys_cc': PackageScript(None, p('sys_cc.py')),
-  'zlib': PackageScript('http://zlib.net/zlib-1.2.7.tar.gz', p('zlib.py')),
+
+packages = {
+  'hdf5': PackageScript(
+      source='http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2',
+      py_file=p('hdf5.py')
+    ),
+  'mpich': PackageConfMakeInstall(
+      source='http://www.mpich.org/static/tarballs/3.0.1/mpich-3.0.1.tar.gz',
+      imps={i: Imp(requires='cc') for i in ('mpi1','mpi2','mpi3')},
+      lib='mpich'
+    ),
+  'openmpi': PackageConfMakeInstall(
+      source='http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.3.tar.bz2',
+      imps={i: Imp(requires='cc') for i in ('mpi1','mpi2','mpi3')},
+      lib='openmpi'
+    ),
+  'sys_cc': PackageSys('cc'),
+  'zlib': PackageScript(
+      source='http://zlib.net/zlib-1.2.7.tar.gz',
+      py_file=p('zlib.py')
+    ),
 }
+
 del p, repopath

@@ -1,12 +1,12 @@
 import os
 import sys
 
-from fief import async, Cmd, easy, EnvDelta, ifc
+from fief import async, Cmd, easy, EnvDelta, Imp
 
-interfaces = {
-  'hdf5': ifc(requires=('zlib',)), # and cmake?
-  'hdf5-cpp': ifc(subsumes='hdf5'), 
-  'hdf5-parallel': ifc(subsumes='hdf5', requires='mpi2'),
+implements = {
+  'hdf5': Imp(requires=('zlib',)), # and cmake?
+  'hdf5-cpp': Imp(subsumes=('hdf5',)), 
+  'hdf5-parallel': Imp(subsumes=('hdf5',), requires=('mpi2',)),
 }
 
 def deliverable_envdelta(built):
@@ -25,12 +25,11 @@ def deliverable_libs(built):
 def build_a(ctx):
   pkg = ctx.package
   src = ctx.source
-  parl, cpp = False, False
-  if ctx['implementor','hdf5-parallel'] == ctx.package:
-    print>>sys.stderr, 'PARALLEL!!'
+  
+  cpp = pkg == ctx['implementor','hdf5-cpp']
+  parl = pkg == ctx['implementor','hdf5-parallel']
   
   to = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
-  to = os.path.abspath(to)
   os.mkdir(to)
   
   env = yield async.Sync(easy.gather_env_a(ctx))
@@ -55,18 +54,18 @@ def build_a(ctx):
     c.lit('./configure', '--prefix=' + to)
     if parl: 
       c.lit('--enable-parallel')
-    #yield async.Sync(c.exec_a())
+    yield async.Sync(c.exec_a())
 
   c = Cmd(ctx, **cmdkws)
-  c.lit('make','-j','4')
-  #yield async.Sync(c.exec_a())
+  c.lit('make', ctx.option('make-opt-parallel'))
+  yield async.Sync(c.exec_a())
 
   c = Cmd(ctx, **cmdkws)
   c.lit('make','install')
-  #yield async.Sync(c.exec_a())
+  yield async.Sync(c.exec_a())
 
   libs = set(['hdf5','hdf5_hl'])
   if cpp:
     libs |= set(('hdf5_cpp', 'hdf5_hl_cpp'))
-  delivs = {'root': to, 'libs': libs, 'pkg': pkg}
-  yield async.Result(delivs)
+  
+  yield async.Result({'root': to, 'libs': libs})

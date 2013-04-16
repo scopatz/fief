@@ -273,16 +273,17 @@ class TestNotEqualAll(object):
 class MatchArgs(Match):
   Accept = object()
   
-  def __init__(me, argstest, collector, argstore=lambda hist,x,y: hist.__setitem__(x,y)):
+  def __init__(me, argstest, collector,
+    seed={}, merge=lambda old,xys:(lambda d:(d.update(xys),d)[1])(dict(old))):
     """accepts only inputs that match current host hash value, defers to
     argstest to generate test lambda for args.
-    argstest: takes (args_sofar, xs, next_match), returns tester
+    argstest: takes (acc, xs, next_match), returns tester
     collector: takes ({x:y}, result) for argument name and values x,y
     """
     me._argstest = argstest
     me._collector = collector
-    me._argstore = argstore
-    me._argmem = {}
+    me._acc = seed
+    me._merge = merge
   
   def inputs_a(me, xs, query_a):
     hs = yield async.Sync(query_a(xs))
@@ -291,15 +292,12 @@ class MatchArgs(Match):
   
   def args(me, xs):
     def next_match(ys):
-      m = MatchArgs(me._argstest, me._collector, me._argstore)
-      m._argmem.update(me._argmem)
-      for i in xrange(len(xs)):
-        me._argstore(m._argmem, xs[i], ys[i])
-      return m
-    return me._argstest(me._argmem, xs, next_match)
+      xys = dict((xs[i],ys[i]) for i in xrange(len(xs)))
+      return MatchArgs(me._argstest, me._collector, me._merge(me._acc, xys), me._merge)
+    return me._argstest(me._acc, xs, next_match)
   
   def result(me, ans):
-    return me._collector(me._argmem, ans)
+    return me._collector(me._acc, ans)
 
 class ArgMode: # enum
   stored = object()
@@ -311,7 +309,7 @@ class Oven(object):
   def __init__(me, host, path):
     object.__init__(me)
     me._host = host
-    me._path = path
+    me._path = os.path.abspath(path)
     me._dbcxn = None
     me._dbpath = os.path.join(path, "db")
     me._dbpool = async.Pool(size=1)
@@ -348,7 +346,7 @@ class Oven(object):
     return me._host.query_a(keys, _Stash(me))
   
   def _outfile_a(me, path):
-    """ returns a tuple (path,stuff), stuff is only used to delete the file later.
+    """ returns a tuple (abs-path,stuff), stuff is only used to delete the file later.
     """
     def bump(cxn, ensure_table):
       ensure_table('outdirs', ('path','bump'), [['path']])
@@ -371,8 +369,8 @@ class Oven(object):
     yield async.Result((opath,(path,n)))
   
   def _is_outfile(me, path):
-    o = os.path.join(os.path.realpath(me._path), 'o')
-    p = os.path.realpath(path)
+    o = os.path.join(me._path, 'o')
+    p = os.path.abspath(path)
     return p.startswith(o + os.path.sep) # ugly, should use os.path.samefile
   
   def _memo_a(me, argmode, par, fun_a, argmap):

@@ -1,7 +1,7 @@
 from nose.tools import assert_equal, assert_raises
 
 import os
-from fief.solve import solve, DisjointSets
+from fief.solve import solve
 from fief.repository import Repo, Package, ifc
 
 def MockPackage(ifx):

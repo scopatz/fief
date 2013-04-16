@@ -12,32 +12,33 @@ import repository
 import solve
 import valtool
 
+Imp = repository.Imp
+
+class SolutionError(Exception):
+  pass
+
 def deliver_a(fief, ifcs, lazy=False):
-  """ returns (ifc2pkg, pkg2built) where:
+  """
+  When lazy=True, returns (would_build:set, wont_build:set) which describe
+  the sets of packages that will and wont be built.
+  
+  When lazy=False, returns (ifc2pkg, pkg2built) where:
     ifc2pkg: dict that maps interfaces to chosen packages
     pkg2built: dict that maps package to built value
   """
+   
+  def slim_pref(ifc, pkgs):
+    p = fief.preferred_package(ifc)
+    return p if p in pkgs else None
   
-  packages = fief.packages
-  oven = fief.oven
-  repo = fief.repo
-  procurer = fief.procurer
+  soln = None # this will eventually be the used solution
+  slim_soln = _unique_soln(fief, solve.solve(fief.repo, ifcs, slim_pref))
   
-  assert not lazy
-  
-  def memoize(f):
-    m = {}
-    def g(*x):
-      if x not in m:
-        m[x] = f(*x)
-      return m[x]
-    return g
-  
-  @memoize
+  @_memoize
   def package_builder(pkg):
-    pobj = packages[pkg]
+    pobj = fief.packages[pkg]
     kw = {
-      'procurer': procurer,
+      'procurer': fief.procurer,
       'pkg': pkg,
       'src': pobj.source(),
       'builder_a': pobj.builder(),
@@ -55,44 +56,47 @@ def deliver_a(fief, ifcs, lazy=False):
   def argget(x):
     if type(x) is tuple and len(x)>1:
       if x[0]=='builder':
-        return package_builder(x[1]) if x[1] in packages else None
+        return package_builder(x[1]) if x[1] in fief.packages else None
       elif x[0]=='deliverer':
-        return packages[x[1]].deliverer() if x[1] in packages else None
+        return fief.packages[x[1]].deliverer() if x[1] in fief.packages else None
       elif x[0]=='env':
         return os.environ.get(x[1])
       elif x[0]=='implementor':
         return soln.get(x[1])
       elif x[0]=='option':
         return fief.option(pkg, x[1])
-      elif x[0]=='pkg_ifc_reqs':
-        return repo.pkg_ifc_reqs(x[1], x[2])
-      elif x[0]=='pkg_imps':
-        return repo.pkg_imps(x[1])
+      elif x[0]=='pkg_ifc_requires':
+        return fief.repo.pkg_ifc_requires(x[1], x[2])
+      elif x[0]=='pkg_implements':
+        return fief.repo.pkg_implements(x[1])
       else:
         return None
     else:
       return None
   
   # search memo cache for all built packages
-  def argstest(hist, xs, nextm):
+  def argstest(soln, xs, nextm):
     if any(type(x) is tuple and len(x)>1 and x[0]=='implementor' for x in xs):
       return nextm # == lambda x: nextm(m) -- this means match anything
     else:
       return bake.TestEqualAny((tuple(argget(x) for x in xs),), nextm)
   
-  def argstore(hist, x, y):
-    if type(x) is tuple and len(x)>1 and x[0]=='implementor':
-      hist[x[1]] = y
+  def argmerge(soln0, xys):
+    soln1 = dict(soln0)
+    for x,y in xys.iteritems():
+      if type(x) is tuple and len(x)>1 and x[0]=='implementor':
+        soln1[x[1]] = y
+    return soln1
   
-  bldr2pkg = dict((package_builder(p),p) for p in packages)
+  bldr2pkg = dict((package_builder(p),p) for p in fief.packages)
   found = []
-  yield async.Sync(oven.search_a(
+  yield async.Sync(fief.oven.search_a(
     bake.TestEqualAny(
-      tuple(package_builder(p) for p in packages),
+      tuple(package_builder(p) for p in fief.packages),
       lambda bldr: bake.MatchArgs(
         argstest,
-        lambda args,built: found.append((bldr2pkg[bldr], args)),
-        argstore
+        lambda soln,built: found.append((bldr2pkg[bldr], soln)),
+        {}, argmerge
       )
     )
   ))
@@ -104,141 +108,175 @@ def deliver_a(fief, ifcs, lazy=False):
       h2soln[h] = soln
     return h
   
-  # build a fake repo with dummy packages representing those already built
+  def soln_subsumes(a, b):
+    for x in b:
+      if a.get(x) != b[x]:
+        return False
+    return True
+  
   def soln_fragment(soln, pkg):
-    more = list(i for i in repo.pkg_imps(pkg) if soln.get(i)==pkg)
+    more = list(i for i in fief.repo.pkg_implements(pkg) if soln.get(i)==pkg)
     frag = set(more)
     while len(more) > 0:
       more0 = more
       more = []
       for a in more0:
-        reqs = repo.pkg_ifcs_reqs(soln[a], (b for b in repo.pkg_imps(soln[a]) if soln.get(b)==soln[a]))
+        on = (b for b in fief.repo.pkg_implements(soln[a]) if soln.get(b)==soln[a])
+        reqs = fief.repo.pkg_ifcs_requires(soln[a], on)
         for req in reqs:
           if req not in frag:
             frag.add(req)
             more.append(req)
     return dict((i,soln[i]) for i in frag)
   
-  fake_pkgs = {}
-  for pkg in packages:
-    ifx = {}
-    for i,ifc in repo.pkg_imps(pkg).iteritems():
-      ifx['real',i] = repository.ifc(
-        (('real',i) for i in ifc.subsumes),
-        (('real',i) for i in ifc.requires)
-      )
-    fake_pkgs['real',pkg] = ifx
-  
+  # build a fat repo with dummy packages representing those already built
+  fat_pkgs = {}
   for pkg,soln in found:
-    solnh = soln_hash(soln_fragment(soln, pkg))
-    pkg_imps = repo.pkg_imps(pkg)
-    imps = frozenset(i for i in pkg_imps if soln[i]==pkg)
-    reqs = repo.pkg_ifcs_reqs(pkg, imps)
-    req_reals = [('real',i) for i in reqs]
-    req_fakes = set(soln[i] for i in reqs)
-    req_fakes = [('fake',p,soln_hash(soln_fragment(soln,p))) for p in req_fakes]
-    ifx = {('fake',pkg,solnh): repository.ifc(
-      subsumes=(('real',i) for i in imps),
-      requires=req_reals + req_fakes
-    )}
-    fake_pkgs['fake',pkg,solnh] = ifx
+    if soln_subsumes(soln, soln_fragment(slim_soln, pkg)):
+      solnh = soln_hash(soln_fragment(soln, pkg))
+      pkg_imps = fief.repo.pkg_implements(pkg)
+      imps = frozenset(i for i in pkg_imps if soln[i]==pkg)
+      reqs = fief.repo.pkg_ifcs_requires(pkg, imps)
+      req_slims = [('slim',i) for i in reqs]
+      req_fats = set(soln[i] for i in reqs)
+      req_fats = [('fat',p,soln_hash(soln_fragment(soln,p))) for p in req_fats]
+      
+      fat_pkgs['fat',pkg,solnh] = {
+        ('fat',pkg,solnh): Imp(
+          subsumes=(('slim',i) for i in imps),
+          requires=req_slims + req_fats
+        )
+      }
+  
+  for pkg in fief.packages:
+    solnh = soln_hash(soln_fragment(slim_soln, pkg))
+    if ('fat',pkg,solnh) not in fat_pkgs:
+      imps_slim = {}
+      for i,imp in fief.repo.pkg_implements(pkg).iteritems():
+        imps_slim['slim',i] = Imp(
+          (('slim',i) for i in imp.subsumes),
+          (('slim',i) for i in imp.requires)
+        )
+      fat_pkgs['slim',pkg] = imps_slim
+  
+  fat_repo = repository.Repo(fat_pkgs)
+  fat_ifcs = set(('slim',i) for i in ifcs)
+  
+  def fat_pref(ifc, pkgs):
+    assert ifc[0]=='slim'
+    ifc = ifc[1]
+    fav = fief.preferred_package(ifc)
     
-  fake_repo = repository.Repo(fake_pkgs)
-  fake_ifcs = set(('real',i) for i in ifcs)
-  
-  def less(ifc, a, b):
-    if (a is None or a[0]=='fake') != (b is None or b[0]=='fake'):
-      return a is None or a[0]=='fake'
-    if a is None or b is None:
-      return False
-    if a[1] != b[1]:
-      pref = fief.preferred_package(ifc)
-      return a[1] == pref
-    assert a[0]=='fake' and b[0]=='fake'
-    asoln = h2soln[a[2]]
-    bsoln = h2soln[b[2]]
-    return all(bsoln.get(x)==y for x,y in asoln.iteritems())
-  
-  def compare_soln(a, b):
-    a_less, b_less = False, False
-    for x in set(a.keys() + b.keys()):
-      ax = a.get(x)
-      bx = b.get(x)
-      if ax != bx:
-        if less(x, ax, bx):
-          a_less = True
-        elif less(x, bx, ax):
-          b_less = True
+    def better(a, b):
+      if (a[1]==fav) != (b[1]==fav):
+        return a[1]==fav
+      if (a[0]=='fat') != (b[0]=='fat'):
+        return a[0]=='fat'
+      if a[0]=='slim':
+        return False
+      return soln_subsumes(h2soln[b[2]], h2soln[a[2]])
     
-    if a_less and not b_less:
-      return -1
-    if b_less and not a_less:
-      return 1
-    return 0
+    best = None
+    for p in pkgs:
+      if best is None or better(p, best):
+        best = p
+    return best
   
-  least = []
-  solns = set()
-  for a in solve.solve(fake_repo, fake_ifcs):
-    a = dict((i[1],p) for i,p in a.iteritems() if i[0]=='real')
-    ah = frozenset(a.iteritems())
-    if ah not in solns:
-      solns.add(ah)
-      print>>sys.stderr, 'solution:', a
-      dont_add = False
-      for b in list(least):
-        c = compare_soln(a, b)
-        if c < 0:
-          least.remove(b)
-        elif c > 0:
-          dont_add = True
-      if not dont_add:
-        least.append(a)
+  if lazy:
+    would = set()
+    wont = set()
+    try:
+      fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref))
+      for i,p in fat_soln.iteritems():
+        if i[0]=='slim':
+          if p[0]=='slim':
+            would.add(p[1])
+        else:
+          wont.add(p[1])
+    except SolutionError:
+      for i,p in slim_soln.iteritems():
+        if ('slim',p) not in fat_pkgs:
+          wont.add(p)
+        else:
+          would.add(p)
+    yield async.Result((would, wont))
   
-  if len(least) > 1:
-    ambig = {}
-    for soln in least:
-      for x in soln:
-        ambig[x] = ambig.get(x, set())
-        ambig[x].add(str(soln[x]))
-    msg = "Package selection for the following interface(s) is ambiguous:"
-    msg += '\n  '.join(str(i) + ': ' + ', '.join(ps) for i,ps in ambig.items() if len(ps) > 1)
-    raise Exception(msg)
-  elif len(least) == 0:
-    empt = [i for i in repo.interfaces() if len(repo.ifc_imps(i)) == 0]
-    msg = "No package solution could be found."
-    if len(empt) > 0:
-      msg += "  The following interfaces have no implementing packages: " + ", ".join(empt)
-    raise Exception(msg)
+  else: # not lazy, actually build
+    try:
+      fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref))
+      soln = {}
+      for i,p in fat_soln.iteritems():
+        if i[0]=='slim':
+          soln[i[1]] = p[1]
+        else:
+          for _,i1 in fat_pkgs[p][i].subsumes:
+            assert soln.get(i1, p[1]) == p[1]
+            soln[i1] = p[1]
+    except SolutionError:
+      soln = slim_soln
   
-  print>>sys.stderr, 'winner:', least[0]
-  soln = dict((i,p[1]) for i,p in least[0].iteritems())
+    pkg_list = _topsort_pkgs(fief.repo, soln) # packages topsorted by dependencies
+    
+    # preemptively begin procurements in dependency order
+    for pkg in pkg_list:
+      yield async.Begin(fief.procurer.begin_a(fief.packages[pkg].source()))
+    
+    # launch all package builds
+    fut2pkg = {}
+    for pkg in pkg_list:
+      bldr = package_builder(pkg)
+      fut = yield async.Begin(fief.oven.memo_a(bldr, argget, argmode))
+      fut2pkg[fut] = pkg
+    
+    # wait for all packages
+    for fut in fut2pkg:
+      yield async.WaitAny([fut])
+    
+    yield async.Result((soln, dict(
+      (pkg, fut.result()) for fut,pkg in fut2pkg.items()
+    )))
+
+def _unique_soln(fief, solver):
+  num = 0
+  ambig = {}
+  for soln in solver:
+    num += 1
+    for x in soln:
+      ambig[x] = ambig.get(x, set())
+      ambig[x].add(str(soln[x]))
+    if num == 4:
+      break
   
-  pkg_list = _topsort_pkgs(repo, soln) # packages topsorted by dependencies
+  if num != 1:
+    if fief is not None:
+      if num > 1:
+        msg = "Package selection for the following interface(s) is ambiguous:"
+        msg += '\n  '.join(str(i) + ': ' + ', '.join(ps) for i,ps in ambig.items() if len(ps) > 1)
+        raise SolutionError(msg)
+      else:
+        empt = [i for i in fief.repo.interfaces() if len(repo.ifc_implementors(i)) == 0]
+        msg = "No package solution could be found."
+        if len(empt) > 0:
+          msg += "  The following interfaces have no implementing packages: " + ", ".join(empt)
+        raise SolutionError(msg)
+    else:
+      raise SolutionError()
   
-  # preemptively begin procurements in dependency order
-  for pkg in pkg_list:
-    yield async.Begin(procurer.begin_a(packages[pkg].source()))
-  
-  # launch all package builds
-  fut2pkg = {}
-  for pkg in pkg_list:
-    bldr = package_builder(pkg)
-    fut = yield async.Begin(oven.memo_a(bldr, argget, argmode))
-    fut2pkg[fut] = pkg
-  
-  # wait for all packages
-  for fut in fut2pkg:
-    yield async.WaitAny([fut])
-  
-  yield async.Result((soln, dict(
-    (pkg, fut.result()) for fut,pkg in fut2pkg.items()
-  )))
+  return soln
+
+def _memoize(f):
+  m = {}
+  def g(*x):
+    if x not in m:
+      m[x] = f(*x)
+    return m[x]
+  return g
 
 def _topsort_pkgs(repo, soln):
   pkg_deps = {} # package to package dependencies, not transitively closed
   for ifc,pkg in soln.iteritems():
     pkg_deps[pkg] = pkg_deps.get(pkg, set())
-    pkg_deps[pkg].update(soln[req] for req in repo.pkg_ifc_reqs(pkg, ifc))
+    pkg_deps[pkg].update(soln[req] for req in repo.pkg_ifc_requires(pkg, ifc))
   
   pkg_list = [] # packages topsorted by dependencies
   def topsort(pkgs):
