@@ -133,10 +133,13 @@ def deliver_a(fief, ifcs, lazy=False):
     solnh = soln_hash(soln_fragment(soln, pkg))
     pkg_imps = repo.pkg_imps(pkg)
     imps = frozenset(i for i in pkg_imps if soln[i]==pkg)
-    req_pkgs = set(soln[i] for i in repo.pkg_ifcs_reqs(pkg, imps))
+    reqs = repo.pkg_ifcs_reqs(pkg, imps)
+    req_reals = [('real',i) for i in reqs]
+    req_fakes = set(soln[i] for i in reqs)
+    req_fakes = [('fake',p,soln_hash(soln_fragment(soln,p))) for p in req_fakes]
     ifx = {('fake',pkg,solnh): repository.ifc(
       subsumes=(('real',i) for i in imps),
-      requires=(('fake',p,soln_hash(soln_fragment(soln,p))) for p in req_pkgs)
+      requires=req_reals + req_fakes
     )}
     fake_pkgs['fake',pkg,solnh] = ifx
     
@@ -144,15 +147,14 @@ def deliver_a(fief, ifcs, lazy=False):
   fake_ifcs = set(('real',i) for i in ifcs)
   
   def less(ifc, a, b):
-    if ifc[0] != 'real':
-      print>>sys.stderr, a, b
-    assert ifc[0] == 'real'
-    if a[0] != b[0]:
-      return a[0] == 'fake'
+    if (a is None or a[0]=='fake') != (b is None or b[0]=='fake'):
+      return a is None or a[0]=='fake'
+    if a is None or b is None:
+      return False
     if a[1] != b[1]:
-      pref = fief.preferred_package(ifc[1])
+      pref = fief.preferred_package(ifc)
       return a[1] == pref
-    assert a[0] == 'fake'
+    assert a[0]=='fake' and b[0]=='fake'
     asoln = h2soln[a[2]]
     bsoln = h2soln[b[2]]
     return all(bsoln.get(x)==y for x,y in asoln.iteritems())
@@ -160,51 +162,46 @@ def deliver_a(fief, ifcs, lazy=False):
   def compare_soln(a, b):
     a_less, b_less = False, False
     for x in set(a.keys() + b.keys()):
-      ax, bx = a.get(x), b.get(x)
+      ax = a.get(x)
+      bx = b.get(x)
       if ax != bx:
-        if ax is None:
-          a_less = True
-        elif bx is None:
-          b_less = True
-        elif less(x, ax, bx):
+        if less(x, ax, bx):
           a_less = True
         elif less(x, bx, ax):
           b_less = True
+    
     if a_less and not b_less:
       return -1
     if b_less and not a_less:
       return 1
     return 0
   
-  def real_soln(soln):
-    s1 = {}
-    for i,p in soln.iteritems():
-      if i[0]=='real':
-        s1[i[1]] = p[1]
-    return s1
-
   least = []
+  solns = set()
   for a in solve.solve(fake_repo, fake_ifcs):
-    #print>>sys.stderr, 'cand', a
-    dont_add = False
-    for b in list(least):
-      c = compare_soln(a, b)
-      if c < 0:
-        least.remove(b)
-      elif c > 0:
-        dont_add = True
-    if not dont_add:
-      least.append(a)
+    a = dict((i[1],p) for i,p in a.iteritems() if i[0]=='real')
+    ah = frozenset(a.iteritems())
+    if ah not in solns:
+      solns.add(ah)
+      print>>sys.stderr, 'solution:', a
+      dont_add = False
+      for b in list(least):
+        c = compare_soln(a, b)
+        if c < 0:
+          least.remove(b)
+        elif c > 0:
+          dont_add = True
+      if not dont_add:
+        least.append(a)
   
   if len(least) > 1:
-    print>>sys.stderr, 'least', least
     ambig = {}
     for soln in least:
       for x in soln:
         ambig[x] = ambig.get(x, set())
-        ambig[x].add(soln[x])
+        ambig[x].add(str(soln[x]))
     msg = "Package selection for the following interface(s) is ambiguous:"
-    msg += '\n  '.join(i + ': ' + ', '.join(ps) for i,ps in ambig.items() if len(ps) > 1)
+    msg += '\n  '.join(str(i) + ': ' + ', '.join(ps) for i,ps in ambig.items() if len(ps) > 1)
     raise Exception(msg)
   elif len(least) == 0:
     empt = [i for i in repo.interfaces() if len(repo.ifc_imps(i)) == 0]
@@ -213,7 +210,8 @@ def deliver_a(fief, ifcs, lazy=False):
       msg += "  The following interfaces have no implementing packages: " + ", ".join(empt)
     raise Exception(msg)
   
-  soln = real_soln(least[0])
+  print>>sys.stderr, 'winner:', least[0]
+  soln = dict((i,p[1]) for i,p in least[0].iteritems())
   
   pkg_list = _topsort_pkgs(repo, soln) # packages topsorted by dependencies
   

@@ -26,6 +26,8 @@ def build_a(ctx):
   pkg = ctx.package
   src = ctx.source
   parl, cpp = False, False
+  if ctx['implementor','hdf5-parallel'] == ctx.package:
+    print>>sys.stderr, 'PARALLEL!!'
   
   to = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
   to = os.path.abspath(to)
@@ -53,15 +55,15 @@ def build_a(ctx):
     c.lit('./configure', '--prefix=' + to)
     if parl: 
       c.lit('--enable-parallel')
-    yield async.Sync(c.exec_a())
+    #yield async.Sync(c.exec_a())
 
   c = Cmd(ctx, **cmdkws)
   c.lit('make','-j','4')
-  yield async.Sync(c.exec_a())
+  #yield async.Sync(c.exec_a())
 
   c = Cmd(ctx, **cmdkws)
   c.lit('make','install')
-  yield async.Sync(c.exec_a())
+  #yield async.Sync(c.exec_a())
 
   libs = set(['hdf5','hdf5_hl'])
   if cpp:

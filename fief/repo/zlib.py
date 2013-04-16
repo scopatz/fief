@@ -43,14 +43,14 @@ def build_a(ctx):
   else:
     c = Cmd(ctx, **cmdkws)
     c.lit('./configure', '--prefix=' + root)
-    yield async.Sync(c.exec_a())
+    #yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
     c.lit('make','-j','4')
-    yield async.Sync(c.exec_a())
+    #yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
     c.lit('make','install')
-    yield async.Sync(c.exec_a())
+    #yield async.Sync(c.exec_a())
   
   yield async.Result(root)
