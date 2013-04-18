@@ -37,21 +37,17 @@ class Fief(object):
   def default_interfaces(me):
     return me._deft_ifcs
   
-  def preferred_package(me, ifc):
-    repo = me.repo
+  def preferred_packages(me, ifc, pkg_ok=lambda p:True):
     pref = me._pref
-    p = pref(ifc)
-    if p is not None:
-      return p
-    for i in repo.ifc_subsumers(ifc):
-      p = pref(i)
-      if p is not None:
-        return p
-    for i in me.repo.ifc_subsets(ifc):
-      p = pref(i)
-      if p is not None and i in repo.pkg_implements(p):
-        return p
-    return None
+    for some in me.repo.walk_above(ifc):
+      ps = set()
+      for i in some:
+        p = pref(i)
+        if pkg_ok(p):
+          ps.add(p)
+      if len(ps) > 0:
+        return ps
+    return ()
   
   def option(me, pkg, x):
     return me._opt(pkg, x)

@@ -6,9 +6,9 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
   
   repo: repository.Repo
   ifcs: iterable of initial required interfaces
-  pref: lambda ifc,pkgs -> (pkg|None) -- given a choice of implementing packages,
-        is there one that would be best?  If so, if a solution is found with that
-        binding no other bindings for this interface will be attempted.
+  pref: lambda (ifc,pkgs)->[pkg] -- given a choice of implementing packages,
+        are there some that would be best?  Solutions beyond those found with
+        one of these bindings will be skipped.
   """
   
   # solver state
@@ -79,27 +79,29 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
       # bind interface to preferred packages first
       while len(ps) > 1:
         best = pref(i, ps)
-        if best is None: break
-        p = best
-        least = repo.least_ifcs(i1 for i1 in repo.pkg_implements(p) if i in repo.ifc_subsets(i1))
-        solved = False
-        for i1 in least:
-          revert = bind(i1, p)
-          if revert is not None:
-            for soln in branch():
-              solved = True
-              yield soln
-            revert()
-        if solved:
-          ps = () # skip non-preferred packages
+        if len(best or ()) == 0:
           break
-        else:
+        solved = False
+        for p in best:
           ps.discard(p)
+          mins = (i1 for i1 in repo.pkg_implements(p) if i in repo.ifc_subsets(i1))
+          mins = repo.min_ifcs(mins)
+          for i1 in mins:
+            revert = bind(i1, p)
+            if revert is not None:
+              for soln in branch():
+                solved = True
+                yield soln
+              revert()
+        if solved:
+          ps = ()
+          break
       
       # bind interface to remainnig non-preferred packages
       for p in ps:
-        least = repo.least_ifcs(i1 for i1 in repo.pkg_implements(p) if i in repo.ifc_subsets(i1))
-        for i1 in least:
+        mins = (i1 for i1 in repo.pkg_implements(p) if i in repo.ifc_subsets(i1))
+        mins = repo.min_ifcs(mins)
+        for i1 in mins:
           revert = bind(i1, p)
           if revert is not None:
             for soln in branch():

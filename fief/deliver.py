@@ -19,22 +19,22 @@ class SolutionError(Exception):
 
 def deliver_a(fief, ifcs, lazy=False):
   """
-  When lazy=True, returns (would_build:set, wont_build:set) which describe
-  the sets of packages that will and wont be built.
-  
-  When lazy=False, returns (ifc2pkg, pkg2built) where:
+  When lazy=True, returns (ifc2pkg, will_build) where:
     ifc2pkg: dict that maps interfaces to chosen packages
-    pkg2built: dict that maps package to built value
+    will_build: set of packages that will require building
+    
+  When lazy=False, returns (ifc2pkg, delv) where:
+    ifc2pkg: dict that maps interfaces to chosen packages
+    delv: (ifc,what)->deliverable -- lambda to retrieve deliverables
   """
    
   def slim_pref(ifc, pkgs):
-    p = fief.preferred_package(ifc)
-    return p if p in pkgs else None
+    return fief.preferred_packages(ifc, lambda p: p in pkgs)
   
   soln = None # this will eventually be the used solution
   slim_soln = _unique_soln(fief, solve.solve(fief.repo, ifcs, slim_pref))
   
-  @_memoize
+  @_memoize(None)
   def package_builder(pkg):
     pobj = fief.packages[pkg]
     kw = {
@@ -102,6 +102,7 @@ def deliver_a(fief, ifcs, lazy=False):
   ))
   
   h2soln = {}
+  @_memoize(id)
   def soln_hash(soln):
     h = valtool.Hasher().eat(soln).digest()
     if h not in h2soln:
@@ -114,6 +115,7 @@ def deliver_a(fief, ifcs, lazy=False):
         return False
     return True
   
+  @_memoize(id, None)
   def soln_fragment(soln, pkg):
     more = list(i for i in fief.repo.pkg_implements(pkg) if soln.get(i)==pkg)
     frag = set(more)
@@ -132,6 +134,7 @@ def deliver_a(fief, ifcs, lazy=False):
   # build a fat repo with dummy packages representing those already built
   fat_pkgs = {}
   for pkg,soln in found:
+    # only create a fat package if it subsumes the slim solution
     if soln_subsumes(soln, soln_fragment(slim_soln, pkg)):
       solnh = soln_hash(soln_fragment(soln, pkg))
       pkg_imps = fief.repo.pkg_implements(pkg)
@@ -165,56 +168,47 @@ def deliver_a(fief, ifcs, lazy=False):
   def fat_pref(ifc, pkgs):
     assert ifc[0]=='slim'
     ifc = ifc[1]
-    fav = fief.preferred_package(ifc)
+    favs = fief.preferred_packages(ifc, lambda p: p in pkgs)
     
     def better(a, b):
-      if (a[1]==fav) != (b[1]==fav):
-        return a[1]==fav
+      if (a[1] in favs) != (b[1] in favs):
+        return a[1] in favs
+      if a[1] != b[1]:
+        return False
       if (a[0]=='fat') != (b[0]=='fat'):
         return a[0]=='fat'
       if a[0]=='slim':
         return False
       return soln_subsumes(h2soln[b[2]], h2soln[a[2]])
     
-    best = None
+    best = []
     for p in pkgs:
-      if best is None or better(p, best):
-        best = p
+      if not any(better(b, p) for b in best):
+        best = list(b for b in best if not better(p, b))
+        best.append(p)
     return best
   
+  try:
+    fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref))
+    soln = {}
+    will_build = set()
+    for i,p in fat_soln.iteritems():
+      if i[0]=='slim':
+        soln[i[1]] = p[1]
+        if p[0]=='slim':
+          will_build.add(p[1])
+      else:
+        for _,i1 in fat_pkgs[p][i].subsumes:
+          assert soln.get(i1, p[1]) == p[1]
+          soln[i1] = p[1]
+  except SolutionError:
+    soln = slim_soln
+    will_build = set(p for p in slim_soln.itervalues() if ('slim',p) in fat_pkgs)
+  
   if lazy:
-    would = set()
-    wont = set()
-    try:
-      fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref))
-      for i,p in fat_soln.iteritems():
-        if i[0]=='slim':
-          if p[0]=='slim':
-            would.add(p[1])
-        else:
-          wont.add(p[1])
-    except SolutionError:
-      for i,p in slim_soln.iteritems():
-        if ('slim',p) not in fat_pkgs:
-          wont.add(p)
-        else:
-          would.add(p)
-    yield async.Result((would, wont))
-  
-  else: # not lazy, actually build
-    try:
-      fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref))
-      soln = {}
-      for i,p in fat_soln.iteritems():
-        if i[0]=='slim':
-          soln[i[1]] = p[1]
-        else:
-          for _,i1 in fat_pkgs[p][i].subsumes:
-            assert soln.get(i1, p[1]) == p[1]
-            soln[i1] = p[1]
-    except SolutionError:
-      soln = slim_soln
-  
+    yield async.Result((soln, will_build))
+  else:
+    # not being lazy, actually build
     pkg_list = _topsort_pkgs(fief.repo, soln) # packages topsorted by dependencies
     
     # preemptively begin procurements in dependency order
@@ -222,19 +216,17 @@ def deliver_a(fief, ifcs, lazy=False):
       yield async.Begin(fief.procurer.begin_a(fief.packages[pkg].source()))
     
     # launch all package builds
-    fut2pkg = {}
+    pkg2fut = {}
     for pkg in pkg_list:
       bldr = package_builder(pkg)
-      fut = yield async.Begin(fief.oven.memo_a(bldr, argget, argmode))
-      fut2pkg[fut] = pkg
+      pkg2fut[pkg] = yield async.Begin(fief.oven.memo_a(bldr, argget, argmode))
     
     # wait for all packages
-    for fut in fut2pkg:
-      yield async.WaitAny([fut])
+    builts = {}
+    for pkg,fut in pkg2fut.iteritems():
+      builts[pkg] = yield async.Wait(fut)
     
-    yield async.Result((soln, dict(
-      (pkg, fut.result()) for fut,pkg in fut2pkg.items()
-    )))
+    yield async.Result((soln, easy.deliverabler(fief.packages, soln, builts)))
 
 def _unique_soln(fief, solver):
   num = 0
@@ -244,8 +236,8 @@ def _unique_soln(fief, solver):
     for x in soln:
       ambig[x] = ambig.get(x, set())
       ambig[x].add(str(soln[x]))
-    if num == 4:
-      break
+      if len(ambig[x]) > 1:
+        break
   
   if num != 1:
     if fief is not None:
@@ -264,13 +256,16 @@ def _unique_soln(fief, solver):
   
   return soln
 
-def _memoize(f):
-  m = {}
-  def g(*x):
-    if x not in m:
-      m[x] = f(*x)
-    return m[x]
-  return g
+def _memoize(*ps):
+  def decorate(f):
+    m = {}
+    def g(*xs):
+      pxs = tuple((ps[i](xs[i]) if ps[i] is not None else xs[i]) for i in xrange(len(xs)))
+      if pxs not in m:
+        m[pxs] = f(*xs)
+      return m[pxs]
+    return g
+  return decorate
 
 def _topsort_pkgs(repo, soln):
   pkg_deps = {} # package to package dependencies, not transitively closed
@@ -283,7 +278,7 @@ def _topsort_pkgs(repo, soln):
     for pkg in pkgs:
       if pkg not in pkg_list:
         topsort(pkg_deps.get(pkg, ()))
-      if pkg not in pkg_list:
+        assert pkg not in pkg_list
         pkg_list.append(pkg)
   topsort(pkg_deps)
   
@@ -295,7 +290,7 @@ def _package_memo_build(procurer, pkg, src, builder_a, opts):
   
   def build_a(ctx):
     # wait for all dependency packages to build before we untar source
-    deps = easy.dependencies(ctx, pkg)
+    deps = easy.dependent_pkgs(ctx, pkg)
     for dep in deps:
       yield async.Sync(ctx.memo_a(ctx['builder',dep]))
     

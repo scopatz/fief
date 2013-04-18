@@ -9,7 +9,7 @@ implements = {
   'hdf5-parallel': Imp(subsumes=('hdf5',), requires=('mpi2',)),
 }
 
-def deliverable_envdelta(built):
+def deliverable_envdelta(ifc, built, delv):
   root = built['root']
   return EnvDelta(
     sets={
@@ -19,7 +19,7 @@ def deliverable_envdelta(built):
     }
   )
 
-def deliverable_libs(built):
+def deliverable_libs(ifc, built, delv):
   return built['libs']
 
 def build_a(ctx):

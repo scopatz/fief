@@ -29,7 +29,7 @@ class Package(object):
     raise Exception('Not implemented.')
   
   def deliverer(me):
-    """returns function (what,built) -> deliverable"""
+    """returns function (ifc,what,built,delv) -> deliverable"""
     raise Exception('Not implemented.')
   
   def builder(me):
@@ -103,6 +103,55 @@ class Repo(object):
       for b in ifc_subs[a]:
         reqs.update(pkg_ifc_reqs.get((pkg,b), ()))
     
+    # partition into equivalence classes
+    eqrep = {}
+    eqset = {}
+    for a in ifcs:
+      for b in ifc_subs[a]:
+        if a in ifc_subs[b]:
+          r = min(eqrep.get(a,a), eqrep.get(b,b))
+          eqrep[a] = r
+          eqrep[b] = r
+    for a in eqrep:
+      b = a
+      while b != eqrep[b]:
+        b = eqrep[b]
+      eqrep[a] = b
+    
+    for a in eqrep:
+      r = eqrep[a]
+      if r not in eqset:
+        eqset[r] = set()
+      eqset[r].add(a)
+      eqset[a] = eqset[r]
+    
+    # topsort eq class representatives
+    topreps = []
+    topset = set()
+    def topsort(them):
+      for a in them:
+        r = eqrep[a]
+        if r not in topset:
+          topset.add(r)
+          topsort(ifc_subs[r])
+          topreps.append(r)
+    topsort(ifcs)
+    
+    glbs = {}
+    lubs = {}
+    for a in topreps:
+      glbs[a] = set(eqrep[b] for b in ifc_subs[a] if eqrep[b] != a)
+      for b in ifc_subs[a]:
+        b = eqrep[b]
+        if a != b:
+          glbs[a].difference_update(eqrep[c] for c in ifc_subs[b] if eqrep[c] != b)
+    
+      lubs[a] = set(eqrep[b] for b in ifc_bigs[a] if eqrep[b] != a)
+      for b in ifc_bigs[a]:
+        b = eqrep[b]
+        if a != b:
+          lubs[a].difference_update(eqrep[c] for c in ifc_bigs[b] if eqrep[c] != b)
+    
     me._pkg_imps = pkg_imps
     me._pkgs = frozenset(pkg_imps)
     me._pkg_ifc_reqs = pkg_ifc_reqs
@@ -110,6 +159,11 @@ class Repo(object):
     me._ifc_imps = dict((ifc,frozenset(pkgs)) for ifc,pkgs in ifc_imps.iteritems())
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
     me._ifc_bigs = dict((ifc,frozenset(bigs)) for ifc,bigs in ifc_bigs.iteritems())
+    me._eqrep = eqrep
+    me._eqset = eqset
+    me._topreps = topreps
+    me._glbreps = glbs
+    me._lubreps = lubs
   
   def packages(me):
     return me._pkgs
@@ -154,18 +208,48 @@ class Repo(object):
         un.update(me._pkg_ifc_reqs[pkg,i])
     return un
   
-  def least_ifcs(me, ifcs):
-    """Given an iterable of interfaces, returns a set of those which are least
-    points in the subsumption heirarchy."""
-    least = set()
-    for a in ifcs:
-      dont_add = False
-      for b in tuple(least):
-        if b in me._ifc_subs[a]:
-          dont_add = True
-          break
-        elif a in me._ifc_subs[b]:
-          least.discard(b)
-      if not dont_add:
-        least.add(a)
-    return least
+  def min_ifcs(me, ifcs):
+    """Given an iterable of interfaces, returns a set of those which are minimal
+    in the subsumption heirarchy."""
+    eqrep = me._eqrep
+    eqset = me._eqset
+    bigs = me._ifc_bigs
+    mins = set(eqrep[a] for a in ifcs)
+    for a in list(mins):
+      mins.difference_update(eqrep[b] for b in bigs[a] if eqrep[b] != a)
+    u = set()
+    for r in mins:
+      u.update(eqset[r])
+    return u
+  
+  def walk_above(me, ifc):
+    def union(xs):
+      u = set()
+      for x in xs:
+        u.update(x)
+      return u
+    
+    eqrep = me._eqrep
+    eqset = me._eqset
+    bigs = me._ifc_bigs
+    lubs = me._lubreps
+    rs = (eqrep[ifc],)
+    while len(rs) > 0:
+      yield union(eqset[r] for r in rs)
+      rs = union(lubs[r] for r in rs)
+  
+  def walk_below(me, ifc):
+    def union(xs):
+      u = set()
+      for x in xs:
+        u.update(x)
+      return u
+    
+    eqrep = me._eqrep
+    eqset = me._eqset
+    subs = me._ifc_subs
+    glbs = me._glbreps
+    rs = (eqrep[ifc],)
+    while len(rs) > 0:
+      yield union(eqset[r] for r in rs)
+      rs = union(glbs[r] for r in rs)

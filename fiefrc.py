@@ -1,11 +1,10 @@
 import os
 from fief import easy
 
-
 stash = ".fief-stash"
 
 preference = {
-  'mpi2': 'mpich'
+  'mpi2': 'openmpi'
 }.get
 
 def option(pkg, x):

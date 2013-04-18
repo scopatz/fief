@@ -6,7 +6,7 @@ implements = {
   'zlib': Imp(requires='cc')
 }
 
-def deliverable_envdelta(built):
+def deliverable_envdelta(ifc, built, delv):
   root = built
   return EnvDelta(
     sets={
@@ -16,7 +16,7 @@ def deliverable_envdelta(built):
     }
   )
 
-def deliverable_libs(built):
+def deliverable_libs(ifc, built, delv):
   return frozenset(['z'])
 
 def build_a(ctx):
