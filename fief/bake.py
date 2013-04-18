@@ -69,14 +69,15 @@ def _flatten(x):
     yield x
 
 class Cmd(object):
-  def __init__(me, ctx, cwd=None, env=None, executable=None, tag=None, 
-               showout=False, showerr=True):
+  def __init__(me, ctx, cwd=None, env=None, executable=None, tag=None,
+               pool=None, showout=False, showerr=True):
     me._ctx = ctx
     me._toks = []
     me._oxs = {}
     me.cwd = cwd
     me.env = env or dict(os.environ)
     me.executable = executable # if os.name == 'nt' else None
+    me.pool = pool
     me.tag = tag
     me.showout = showout
     me.showerr = showerr
@@ -121,6 +122,7 @@ class Cmd(object):
     if not hasattr(me, 'shline'):
       yield async.Sync(me.prepare_a())
     
+    @async.assign_pool(me.pool)
     def go():
       pipe = subprocess.PIPE
       p = subprocess.Popen(me._toks, cwd=me.cwd, env=me.env, stdin=pipe, stdout=pipe, stderr=pipe)
@@ -617,7 +619,7 @@ class _Context(_View):
         me.args(seen)
       else:
         assert False
-    
+
     yield async.Result(log.result())
 
 _tag_done = 0

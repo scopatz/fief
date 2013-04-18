@@ -246,7 +246,7 @@ def _unique_soln(fief, solver):
         msg += '\n  '.join(str(i) + ': ' + ', '.join(ps) for i,ps in ambig.items() if len(ps) > 1)
         raise SolutionError(msg)
       else:
-        empt = [i for i in fief.repo.interfaces() if len(repo.ifc_implementors(i)) == 0]
+        empt = [i for i in fief.repo.interfaces() if len(fief.repo.ifc_implementors(i)) == 0]
         msg = "No package solution could be found."
         if len(empt) > 0:
           msg += "  The following interfaces have no implementing packages: " + ", ".join(empt)
@@ -312,7 +312,6 @@ def _package_memo_build(procurer, pkg, src, builder_a, opts):
       built = yield async.Sync(builder_a(WrapCtx()))
     finally:
       cleanup()
-
     yield async.Result(built)
   
   return build_a

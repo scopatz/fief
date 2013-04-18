@@ -214,12 +214,14 @@ class Repo(object):
     eqrep = me._eqrep
     eqset = me._eqset
     bigs = me._ifc_bigs
+    ifcs = set(ifcs)
     mins = set(eqrep[a] for a in ifcs)
     for a in list(mins):
       mins.difference_update(eqrep[b] for b in bigs[a] if eqrep[b] != a)
     u = set()
     for r in mins:
       u.update(eqset[r])
+    u.intersection_update(ifcs)
     return u
   
   def walk_above(me, ifc):

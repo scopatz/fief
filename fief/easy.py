@@ -121,6 +121,34 @@ class PackageConfigMakeInstall(Package):
     
     return build_a
 
+class PackageAptGet(Package):
+  thread = async.Pool(size=1)
+  
+  def __init__(me, aptpkg, ifcs, libs=()):
+    me._aptpkg = aptpkg
+    me._ifcs = ifcs
+    me._libs = libs
+  
+  def source(me):
+    return None
+  
+  def implements_a(me, oven):
+    yield async.Result({i: Imp() for i in me._ifcs})
+  
+  def deliverer(me):
+    def deliverable(ifc, what, built, delv):
+      return None
+    return deliverable
+  
+  def builder(me):
+    aptpkg = me._aptpkg
+    def build_a(ctx):
+      c = Cmd(ctx, tag=ctx.package, pool=PackageAptGet.thread)
+      c.lit('apt-get','-y','install',aptpkg)
+      yield async.Sync(c.exec_a())
+      yield async.Result(None)
+    return build_a
+  
 def required_ifcs(ctx, ifcs):
   def args_notag(xs):
     a = ctx.args(xs)
@@ -262,6 +290,7 @@ packages = {
       libs=('openmpi',)
     ),
   'sys_cc': PackageSys('cc'),
+  'sys_fortran': PackageAptGet('gfortran', ['fortran']),
   'zlib': PackageScript(
       source='http://zlib.net/zlib-1.2.7.tar.gz',
       py_file=_repo_py('zlib.py')

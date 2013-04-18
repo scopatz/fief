@@ -44,7 +44,7 @@ def env_selection(finst=None):
             selenv = set()
         else:
             selenv = finst.default_interfaces()
-    return selenv
+    return finst.implicate(selenv)
 
 
 _bashcomptemplate = """# fief bash completion

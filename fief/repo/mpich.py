@@ -3,7 +3,12 @@ import os
 from fief import async, Cmd, easy, EnvDelta, Imp
 
 implements = {
-  i: Imp(requires='cc') for i in ('mpi1','mpi2','mpi3')
+  'mpi1': Imp(requires='cc'),
+  'mpi2': Imp(requires='cc'),
+  'mpi3': Imp(requires='cc'),
+  'mpi1-wrap-fortran': Imp(subsumes='mpi1', requires='fortran'),
+  'mpi2-wrap-fortran': Imp(subsumes='mpi2', requires='fortran'),
+  'mpi3-wrap-fortran': Imp(subsumes='mpi3', requires='fortran'),
 }
 
 def deliverable_envdelta(ifc, built, delv):
@@ -21,7 +26,8 @@ def build_a(ctx):
   
   c = Cmd(ctx, **cmdkws)
   c.lit('./configure', '--prefix=' + root)
-  if ctx['implementor','fortran'] is None:
+  imps = ctx.argstup(*[('implementor','mpi%d-wrap-fortran'%v) for v in (1,2,3)])
+  if not any(ctx.package == p for p in imps):
     c.lit('--disable-f77','--disable-fc')
   yield async.Sync(c.exec_a())
   
