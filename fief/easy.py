@@ -290,9 +290,17 @@ packages = {
       libs=('openmpi',)
     ),
   'sys_cc': PackageSys('cc'),
-  'sys_fortran': PackageAptGet('gfortran', ['fortran']),
+  #'sys_fortran': PackageAptGet('gfortran', ['fortran']),
+  'sys_fortran': PackageSys('fortran'),
   'zlib': PackageScript(
       source='http://zlib.net/zlib-1.2.7.tar.gz',
       py_file=_repo_py('zlib.py')
     ),
 }
+
+def implied(x, on):
+  return {
+    'mpi1-fortran': lambda: on('fortran') and on('mpi1'),
+    'mpi2-fortran': lambda: on('fortran') and on('mpi2'),
+    'mpi3-fortran': lambda: on('fortran') and on('mpi3')
+  }.get(x, lambda: False)()

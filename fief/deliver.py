@@ -32,7 +32,7 @@ def deliver_a(fief, ifcs, lazy=False):
     return fief.preferred_packages(ifc, lambda p: p in pkgs)
   
   soln = None # this will eventually be the used solution
-  slim_soln = _unique_soln(fief, solve.solve(fief.repo, ifcs, slim_pref))
+  slim_soln = _unique_soln(fief, solve.solve(fief.repo, ifcs, slim_pref, fief.implied))
   
   @_memoize(None)
   def package_builder(pkg):
@@ -88,7 +88,7 @@ def deliver_a(fief, ifcs, lazy=False):
         soln1[x[1]] = y
     return soln1
   
-  bldr2pkg = dict((package_builder(p),p) for p in fief.packages)
+  bldr2pkg = {package_builder(p): p for p in fief.packages}
   found = []
   yield async.Sync(fief.oven.search_a(
     bake.TestEqualAny(
@@ -188,8 +188,13 @@ def deliver_a(fief, ifcs, lazy=False):
         best.append(p)
     return best
   
+  def fat_implied(x, on):
+    def on1(y):
+      return on(('slim',y))
+    return x[0]=='slim' and fief.implied(x[1], on1)
+  
   try:
-    fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref))
+    fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref, fat_implied))
     soln = {}
     will_build = set()
     for i,p in fat_soln.iteritems():

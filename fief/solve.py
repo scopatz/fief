@@ -1,6 +1,6 @@
 import sys
 
-def solve(repo, ifcs, pref=lambda i,ps:None):
+def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   """Returns an iterable of dicts that map interfaces to packages.
   Each dict will be complete with all dependencies and subsumed interfaces.
   
@@ -12,7 +12,23 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
   """
   
   # solver state
-  world = set(ifcs) # all interfaces ever required
+  world = repo.ifcs_subsets(ifcs) # all interfaces ever required
+  impldep = {}
+  
+  more = repo.interfaces()
+  while len(more) > 0:
+    more0 = more
+    more = []
+    for x in more0:
+      if x not in world:
+        def spy(y):
+          impldep[y] = impldep.get(y, set())
+          impldep[y].add(x)
+          return y in world
+        if imply(x, spy):
+          world.add(x)
+          more.extend(impldep.get(x, ()))
+  
   bound = {} # bound interfaces, closed by subsumption
   unbound = set(world) # interfaces required but not yet bound
   
@@ -31,6 +47,10 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
       unbound.update(unbound_dels)
     
     for i in repo.ifc_subsets(ifc):
+      if i not in world:
+        world.add(i)
+        world_adds.append(i)
+    
       if i in bound:
         if bound[i] != pkg:
           revert()
@@ -38,14 +58,10 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
       else:
         bound[i] = pkg
         bound_adds.append(i)
-      
+
       if i in unbound:
         unbound.discard(i)
         unbound_dels.append(i)
-    
-    if ifc not in world:
-      world.add(ifc)
-      world_adds.append(ifc)
     
     for i in repo.pkg_ifc_requires(pkg, ifc):
       if i not in world:
@@ -54,15 +70,31 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
         unbound.add(i)
         unbound_adds.append(i)
     
+    more = world_adds
+    while len(more) > 0:
+      wake = set()
+      for x in more:
+        wake.update(impldep.get(x, ()))
+      more = []
+      for x in wake:
+        if x not in world:
+          def spy(y):
+            impldep[y] = impldep.get(y, set())
+            impldep[y].add(x)
+            return y in world
+          if imply(x, spy):
+            world.add(x)
+            world_adds.append(x)
+            unbound.add(x)
+            unbound_adds.append(x)
+            more.append(x)
+    
     return revert
   
   def branch():
     if len(unbound) == 0:
       # report a solution
-      w = set(world)
-      for p in bound.itervalues():
-        w.update(i for i in repo.pkg_implements(p))
-      yield dict((i,bound[i]) for i in w if i in bound)
+      yield {i: bound[i] for i in world if i in bound}
     else:
       # pick the interface with the least number of implementing packages
       i_min = None

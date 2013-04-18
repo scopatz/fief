@@ -21,7 +21,7 @@ class Fief(object):
     me._deft_ifcs = frozenset(conf.get('interfaces', ()))
     me._pref = conf.get('preference', lambda ifc: None)
     me._opt = conf.get('option', lambda pkg,x: None)
-    me._implied = conf.get('implied', lambda x,on: False)
+    me.implied = conf.get('implied', lambda x,on: False)
     me.packages = conf.get('packages', {})
     
     me.procurer = procurer.Procurer(os.path.join(me._path_stash, 'procured'))
@@ -53,22 +53,3 @@ class Fief(object):
   
   def option(me, pkg, x):
     return me._opt(pkg, x)
-  
-  def implicate(me, ifcs):
-    implied = me._implied
-    ifcs = set(ifcs)
-    sucs = {}
-    more = me.repo.interfaces()
-    while len(more) > 0:
-      more0 = more
-      more = []
-      for x in more0:
-        if x not in ifcs:
-          def spy(y):
-            sucs[y] = sucs.get(y, set())
-            sucs[y].add(x)
-            return y in ifcs
-          if implied(x, spy):
-            ifcs.add(x)
-            more.extend(sucs.get(x,()))
-    return ifcs
