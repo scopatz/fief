@@ -69,10 +69,12 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
     
     for i in repo.pkg_ifc_requires(pkg, ifc):
       if i not in world:
-        world.add(i)
-        world_adds.append(i)
         unbound.add(i)
         unbound_adds.append(i)
+        for i1 in repo.ifc_subsets(i):
+          if i1 not in world:
+            world.add(i1)
+            world_adds.append(i1)
     
     more = world_adds
     while len(more) > 0:
@@ -136,7 +138,7 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
           ps = ()
           break
       
-      # bind interface to remainnig non-preferred packages
+      # bind interface to remaining non-preferred packages
       for p in ps:
         mins = (i1 for i1 in repo.pkg_implements(p) if i in repo.ifc_subsets(i1))
         mins = repo.min_ifcs(mins)
