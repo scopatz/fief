@@ -89,7 +89,7 @@ def deliver_a(fief, ifcs, lazy=False):
         soln1[x[1]] = y
     return soln1
   
-  bldr2pkg = {package_builder(p): p for p in fief.packages}
+  bldr2pkg = dict((package_builder(p),p) for p in fief.packages)
   found = []
   yield async.Sync(fief.oven.search_a(
     bake.TestEqualAny(
