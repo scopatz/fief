@@ -208,7 +208,7 @@ class Hasher(object):
     if h is not None:
       me._h.update('#' + h.digest())
     else:
-      me._h.update(b)
+      me._h.update(buffer(b))
     
     me._dig = None
     return me
