@@ -107,7 +107,7 @@ class Hasher(object):
   
   def raw(me, x):
     if x is not None:
-      me._h.update(x)
+      me._h.update(buffer(x))
       me._dig = None
     return me
   
@@ -132,11 +132,11 @@ class Hasher(object):
       h = open_h[-1]
       b0 = open_b0[-1]
       if h is not None:
-        h.update(z)
+        h.update(buffer(z))
       elif len(b)-b0 + len(z) >= 256:
         h = hashlib.md5()
         h.update(buffer(b, b0))
-        h.update(z)
+        h.update(buffer(z))
         del b[b0:]
         open_h[-1] = h
       else:
