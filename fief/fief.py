@@ -38,18 +38,8 @@ class Fief(object):
   def default_interfaces(me):
     return me._deft_ifcs
   
-  def preferred_packages(me, ifc, pkg_ok=lambda p:True):
-    # this is wrong, but works for now
-    pref = me._pref
-    for some in me.repo.walk_above(ifc):
-      ps = set()
-      for i in some:
-        p = pref(i)
-        if pkg_ok(p):
-          ps.add(p)
-      if len(ps) > 0:
-        return ps
-    return ()
+  def preferred_package(me, ifc):
+    return me.repo.choose_least(me.repo.ifc_subsumers(ifc), me._pref)
   
   def option(me, pkg, x):
     return me._opt(pkg, x)

@@ -29,11 +29,17 @@ class Package(object):
     raise Exception('Not implemented.')
   
   def deliverer(me):
-    """returns function (ifc,what,built,delv) -> deliverable"""
+    """returns function (ifc,what,built,delv) -> deliverable where:
+    ifc: the interface for which this deliverable is being requested
+    what: the deliverable kind ('envdelta',...)
+    built: the value returned from the builder
+    delv: function(ifc,what)->deliverable -- a view into the deliverables of any
+          interfaces required by this package build.
+    """
     raise Exception('Not implemented.')
   
   def builder(me):
-    """returns async function ctx ~> built"""
+    """returns async function ctx~>built"""
     raise Exception('Not implemented.')
 
 class Repo(object):
@@ -160,7 +166,7 @@ class Repo(object):
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
     me._ifc_bigs = dict((ifc,frozenset(bigs)) for ifc,bigs in ifc_bigs.iteritems())
     me._eqrep = eqrep
-    me._eqset = eqset
+    me._eqset = dict((i,frozenset(s)) for i,s in eqset.iteritems())
     me._topreps = topreps
     me._glbreps = glbs
     me._lubreps = lubs
@@ -187,12 +193,15 @@ class Repo(object):
   def ifc_subsumers(me, ifc):
     return me._ifc_bigs.get(ifc, frozenset())
   
+  def ifc_equivalents(me, ifc):
+    return me._eqset[me._eqrep[ifc]]
+  
   def ifc_implementors(me, ifc):
     """Maps interface to set of packages that implements it directly or indirectly via subsumption."""
     return me._ifc_imps.get(ifc, frozenset())
   
   def pkg_implements(me, pkg):
-    """Maps package to ifc->Imp dictionary."""
+    """Maps package to {ifc:Imp} dictionary."""
     return me._pkg_imps.get(pkg, {})
   
   def pkg_ifc_requires(me, pkg, ifc):
@@ -224,34 +233,40 @@ class Repo(object):
     u.intersection_update(ifcs)
     return u
   
-  def walk_above(me, ifc):
-    def union(xs):
-      u = set()
-      for x in xs:
-        u.update(x)
-      return u
-    
-    eqrep = me._eqrep
-    eqset = me._eqset
-    bigs = me._ifc_bigs
-    lubs = me._lubreps
-    rs = (eqrep[ifc],)
-    while len(rs) > 0:
-      yield union(eqset[r] for r in rs)
-      rs = union(lubs[r] for r in rs)
-  
-  def walk_below(me, ifc):
-    def union(xs):
-      u = set()
-      for x in xs:
-        u.update(x)
-      return u
+  def choose_least(me, ifcs, proj):
+    """within a set of interfaces and given a projection function that to each
+    interfaces assigns either a name or None, find the name (or None) of the set
+    of interfaces which are minimal in the graph of subgraphs."""
     
     eqrep = me._eqrep
     eqset = me._eqset
     subs = me._ifc_subs
-    glbs = me._glbreps
-    rs = (eqrep[ifc],)
-    while len(rs) > 0:
-      yield union(eqset[r] for r in rs)
-      rs = union(glbs[r] for r in rs)
+    m = {}
+    for i in ifcs:
+      i = eqrep[i]
+      x = None
+      for i1 in eqset[i]:
+        x1 = proj(i)
+        if x is None:
+          x = x1
+        elif x1 is not None and x != x1:
+          assert False # proj function is choosing different values for equivalent interfaces
+      if x is not None:
+        m[x] = m.get(x, set())
+        m[x].add(i)
+    
+    def less(a, b):
+      return all(any(i in subs[j] for j in m[b]) for i in m[a])
+    
+    mins = set()
+    for a in m:
+      dont_add = False
+      for b in list(mins):
+        if less(a, b):
+          mins.discard(b)
+        elif not less(b, a):
+          dont_add = True
+      if not dont_add:
+        mins.add(a)
+    
+    return list(mins)[0] if len(mins) == 1 else None

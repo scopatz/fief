@@ -30,7 +30,7 @@ def deliver_a(fief, ifcs, lazy=False):
   """
    
   def slim_pref(ifc, pkgs):
-    return fief.preferred_packages(ifc, lambda p: p in pkgs)
+    return [p for p in [fief.preferred_package(ifc)] if p is not None and p in pkgs]
   
   soln = None # this will eventually be the used solution
   slim_soln = _unique_soln(fief, solve.solve(fief.repo, ifcs, slim_pref, fief.implied))
@@ -170,10 +170,10 @@ def deliver_a(fief, ifcs, lazy=False):
   def fat_pref(ifc, pkgs):
     assert ifc[0]=='slim'
     ifc = ifc[1]
-    favs = fief.preferred_packages(ifc, lambda p: p in pkgs)
+    fav = fief.preferred_package(ifc)
     def better(a, b):
-      if (a[1] in favs) != (b[1] in favs):
-        return a[1] in favs
+      if (a[1] == fav) != (b[1] == fav):
+        return a[1] == fav
       if a[1] != b[1]:
         return False
       if (a[0]=='fat') != (b[0]=='fat'):
