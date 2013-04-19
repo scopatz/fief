@@ -12,8 +12,10 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   """
   
   # solver state
-  world = repo.ifcs_subsets(ifcs) # all interfaces ever required
-  impldep = {}
+  bound = {} # bound interfaces, closed by subsumption
+  unbound = set(ifcs) # interfaces required but not yet bound
+  world = repo.ifcs_subsets(unbound) # all interfaces ever required closed by subsumption
+  idep = {} # implication dependencies
   
   more = repo.interfaces()
   while len(more) > 0:
@@ -22,15 +24,15 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
     for x in more0:
       if x not in world:
         def spy(y):
-          impldep[y] = impldep.get(y, set())
-          impldep[y].add(x)
+          idep[y] = idep.get(y, set())
+          idep[y].add(x)
           return y in world
         if imply(x, spy):
-          world.add(x)
-          more.extend(impldep.get(x, ()))
-  
-  bound = {} # bound interfaces, closed by subsumption
-  unbound = set(world) # interfaces required but not yet bound
+          unbound.add(x)
+          for x1 in repo.ifc_subsets(x):
+            if x1 not in world:
+              world.add(x)
+              more.extend(idep.get(x, ()))
   
   # returns revert lambda if successful, otherwise None
   def bind(ifc, pkg):
@@ -74,20 +76,22 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
     while len(more) > 0:
       wake = set()
       for x in more:
-        wake.update(impldep.get(x, ()))
+        wake.update(idep.get(x, ()))
       more = []
       for x in wake:
         if x not in world:
           def spy(y):
-            impldep[y] = impldep.get(y, set())
-            impldep[y].add(x)
+            idep[y] = idep.get(y, set())
+            idep[y].add(x)
             return y in world
           if imply(x, spy):
-            world.add(x)
-            world_adds.append(x)
             unbound.add(x)
             unbound_adds.append(x)
-            more.append(x)
+            for x1 in repo.ifc_subsets(x):
+              if x1 not in world:
+                world.add(x)
+                world_adds.append(x)
+                more.append(x)
     
     return revert
   
