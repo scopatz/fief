@@ -6,9 +6,11 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   
   repo: repository.Repo
   ifcs: iterable of initial required interfaces
-  pref: lambda (ifc,pkgs)->[pkg] -- given a choice of implementing packages,
+  pref: (ifc,pkgs)->[pkg] -- given a choice of implementing packages,
         are there some that would be best?  Solutions beyond those found with
         one of these bindings will be skipped.
+  imply: (ifc,on:ifc->bool)->bool -- test where the given interface should be auto-
+         required based on the current active state of other interfaces
   """
   
   # solver state
@@ -31,8 +33,8 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
           unbound.add(x)
           for x1 in repo.ifc_subsets(x):
             if x1 not in world:
-              world.add(x)
-              more.extend(idep.get(x, ()))
+              world.add(x1)
+              more.extend(idep.get(x1, ()))
   
   # returns revert lambda if successful, otherwise None
   def bind(ifc, pkg):
@@ -89,16 +91,17 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
             unbound_adds.append(x)
             for x1 in repo.ifc_subsets(x):
               if x1 not in world:
-                world.add(x)
-                world_adds.append(x)
-                more.append(x)
+                world.add(x1)
+                world_adds.append(x1)
+                more.append(x1)
     
     return revert
   
   def branch():
     if len(unbound) == 0:
       # report a solution
-      yield dict((i,bound[i]) for i in world if i in bound)
+      assert all(i in bound for i in world)
+      yield dict(bound)
     else:
       # pick the interface with the least number of implementing packages
       i_min = None
