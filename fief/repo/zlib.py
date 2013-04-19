@@ -47,7 +47,7 @@ def build_a(ctx):
     yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)
-    c.lit('make', ctx.option('make-opt-parallel'))
+    c.lit('make', ctx.option_soft('make-opt-parallel'))
     yield async.Sync(c.exec_a())
     
     c = Cmd(ctx, **cmdkws)

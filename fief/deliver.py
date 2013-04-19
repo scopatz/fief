@@ -43,7 +43,7 @@ def deliver_a(fief, ifcs, lazy=False):
       'pkg': pkg,
       'src': pobj.source(),
       'builder_a': pobj.builder(),
-      'opts': lambda x: fief.option(pkg, x)
+      'opts': lambda pkg,x: fief.option(pkg, x)
     }
     kw['opts'].__valtool_ignore__ = True
     return _package_memo_build(**kw)
@@ -65,7 +65,7 @@ def deliver_a(fief, ifcs, lazy=False):
       elif x[0]=='implementor':
         return soln.get(x[1])
       elif x[0]=='option':
-        return fief.option(pkg, x[1])
+        return fief.option(x[1], x[2])
       elif x[0]=='pkg_ifc_requires':
         return fief.repo.pkg_ifc_requires(x[1], x[2])
       elif x[0]=='pkg_implements':
@@ -306,12 +306,18 @@ def _package_memo_build(procurer, pkg, src, builder_a, opts):
       class WrapCtx(object):
         package = pkg
         source = site
+        
         def __getattr__(me, x):
           return getattr(ctx, x)
+
         def __getitem__(me, x):
           return ctx[x]
-        def option(me, x):
-          return opts(x)
+
+        def option_soft(me, x):
+          return opts(pkg, x)
+        
+        def option_hard(me, x):
+          return ctx['option',pkg,x]
 
       built = yield async.Sync(builder_a(WrapCtx()))
     finally:
