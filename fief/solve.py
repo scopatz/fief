@@ -94,7 +94,7 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   def branch():
     if len(unbound) == 0:
       # report a solution
-      yield {i: bound[i] for i in world if i in bound}
+      yield dict((i,bound[i]) for i in world if i in bound)
     else:
       # pick the interface with the least number of implementing packages
       i_min = None
