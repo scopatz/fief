@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import binascii
 import os
 import sys
 import shutil
@@ -105,6 +106,7 @@ def deliver_a(fief, ifcs, lazy=False):
   @_memoize(id)
   def soln_hash(soln):
     h = valtool.Hasher().eat(soln).digest()
+    h = binascii.hexlify(h)
     if h not in h2soln:
       h2soln[h] = soln
     return h
@@ -146,7 +148,7 @@ def deliver_a(fief, ifcs, lazy=False):
       
       fat_pkgs['fat',pkg,solnh] = {
         ('fat',pkg,solnh): Imp(
-          subsumes=(('slim',i) for i in imps),
+          subsumes=(('slim',i) for i in fief.repo.ifcs_subsets(imps)),
           requires=req_slims + req_fats
         )
       }
@@ -161,7 +163,7 @@ def deliver_a(fief, ifcs, lazy=False):
           (('slim',i) for i in imp.requires)
         )
       fat_pkgs['slim',pkg] = imps_slim
-  
+
   fat_repo = repository.Repo(fat_pkgs)
   fat_ifcs = set(('slim',i) for i in ifcs)
   
@@ -169,7 +171,6 @@ def deliver_a(fief, ifcs, lazy=False):
     assert ifc[0]=='slim'
     ifc = ifc[1]
     favs = fief.preferred_packages(ifc, lambda p: p in pkgs)
-    
     def better(a, b):
       if (a[1] in favs) != (b[1] in favs):
         return a[1] in favs
@@ -189,9 +190,7 @@ def deliver_a(fief, ifcs, lazy=False):
     return best
   
   def fat_implied(x, on):
-    def on1(y):
-      return on(('slim',y))
-    return x[0]=='slim' and fief.implied(x[1], on1)
+    return x[0]=='slim' and fief.implied(x[1], lambda y: on(('slim',y)))
   
   try:
     fat_soln = _unique_soln(None, solve.solve(fat_repo, fat_ifcs, fat_pref, fat_implied))

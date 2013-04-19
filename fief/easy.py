@@ -66,7 +66,7 @@ class PackageScript(Package):
       return ns['deliverable']
     else:
       pre = 'deliverable_'
-      d = { nm[len(pre):]: ns[nm] for nm in ns if nm.startswith(pre) }
+      d = dict((nm[len(pre):],ns[nm]) for nm in ns if nm.startswith(pre))
       return lambda ifc,what,built,delv: d.get(what, lambda *_:None)(ifc,built,delv)
   
   def builder(me):
@@ -202,8 +202,8 @@ def deliverabler(pkgobjs, ifc2pkg, pkg2built):
 def deliverabler_a(ctx):
   deps = dependent_pkgs(ctx, ctx.package)
   a = ctx.args([('builder',p) for p in deps] + [('deliverer',p) for p in deps])
-  bldrs = {x:y for (tag,x),y in a.iteritems() if tag=='builder'}
-  delvs = {x:y for (tag,x),y in a.iteritems() if tag=='deliverer'}
+  bldrs = dict((x,y) for (tag,x),y in a.iteritems() if tag=='builder')
+  delvs = dict((x,y) for (tag,x),y in a.iteritems() if tag=='deliverer')
   
   builts = {}
   for dep in deps:
@@ -230,14 +230,15 @@ def gather_env_a(ctx):
   yield async.Result(ed.apply(os.environ))
 
 def c_envdelta(root):
-  return EnvDelta(sets={ var: path for var,path in {
-      'PATH': os.path.join(root, 'bin'),
-      'CPATH': os.path.join(root, 'include'),
-      'LD_LIBRARY_PATH': os.path.join(root, 'lib'),
-      'PKG_CONFIG_PATH': os.path.join(root, 'lib', 'pkgconfig'),
-      'MANPATH': os.path.join(root, 'share', 'man'),
-    }.iteritems() if os.path.isdir(path)
-  })
+  return EnvDelta(
+    sets=dict((var, path) for var,path in [
+      ('PATH', os.path.join(root, 'bin')),
+      ('CPATH', os.path.join(root, 'include')),
+      ('LD_LIBRARY_PATH', os.path.join(root, 'lib')),
+      ('PKG_CONFIG_PATH', os.path.join(root, 'lib', 'pkgconfig')),
+      ('MANPATH', os.path.join(root, 'share', 'man')),
+    ] if os.path.isdir(path))
+  )
 
 def find_libs(built):
   root = built['root']
@@ -286,8 +287,8 @@ packages = {
     ),
   'openmpi': PackageConfigMakeInstall(
       source='http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.3.tar.bz2',
-      imps={i: Imp(requires='cc') for i in ('mpi1','mpi2','mpi3')},
-      libs=('openmpi',)
+      imps={'mpi3': Imp(requires='cc', subsumes=['mpi1','mpi2'])},
+      libs=['openmpi']
     ),
   'sys_cc': PackageSys('cc'),
   #'sys_fortran': PackageAptGet('gfortran', ['fortran']),

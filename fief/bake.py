@@ -134,16 +134,16 @@ class Cmd(object):
     else:
       tag = ''
     
-    if me.showerr:
-      print >> sys.stderr, '[RUN] ' + tag + me.shline
+    if me.showout or me.showerr:
+      print>>sys.stderr, '[RUN] ' + tag + me.shline
     yield async.Sync(go)
     
     if me.showerr and me.stderr != '':
-      print >> sys.stderr, '-'*72 + '\n[MSG] ' + tag + me.shline + '\n' + \
+      print>>sys.stderr, '-'*72 + '\n[MSG] ' + tag + me.shline + '\n' + \
         me.stderr + ('' if me.stderr[-1] == '\n' else '\n') + '-'*72
     
     if me.showout and me.stdout != '':
-      print >> sys.stderr, '-'*72 + '\n[OUT] ' + tag + me.shline + '\n' + \
+      print>>sys.stderr, '-'*72 + '\n[OUT] ' + tag + me.shline + '\n' + \
         me.stdout + ('' if me.stdout[-1] == '\n' else '\n') + '-'*72
     
     if me.returncode != 0:
