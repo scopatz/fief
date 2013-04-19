@@ -133,7 +133,7 @@ class PackageAptGet(Package):
     return None
   
   def implements_a(me, oven):
-    yield async.Result({i: Imp() for i in me._ifcs})
+    yield async.Result(dict((i,Imp()) for i in me._ifcs))
   
   def deliverer(me):
     def deliverable(ifc, what, built, delv):
