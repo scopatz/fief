@@ -291,6 +291,10 @@ packages = {
 del p
 
 packages = {
+  'cmake': PackageScript(
+      source='http://www.cmake.org/files/v2.8/cmake-2.8.10.2.tar.gz',
+      py_file=_repo_py('cmake.py')
+    ),
   'hdf5': PackageScript(
       source='http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2',
       py_file=_repo_py('hdf5.py')
