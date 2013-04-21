@@ -3,12 +3,19 @@ import sys
 
 import async
 
-ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
+def freeze(ty, x):
+  assert ty in (tuple, frozenset)
+  if type(x) is ty:
+    return x
+  elif hasattr(x, '__iter__'):
+    return ty(x)
+  else:
+    return ty((x,))
 
 class Imp(object):
   def __init__(me, subsumes=(), requires=(), directly=True):
-    me.subsumes = ensure_frozenset(subsumes)
-    me.requires = ensure_frozenset(requires)
+    me.subsumes = freeze(frozenset, subsumes)
+    me.requires = freeze(frozenset, requires)
     me.directly = bool(directly)
   
   def __repr__(me):
@@ -108,9 +115,9 @@ class Repo(object):
     
     ## to require an interface a is to also require all the interfaces it subsumes
     #for (pkg,ifc),reqs in pkg_ifc_reqs.iteritems():
-    #  for req in tuple(reqs):
-    #    reqs.update(ifc_subs.get(req, ()))
-    #  assert ifc not in reqs
+      #for req in tuple(reqs):
+        #reqs.update(ifc_subs.get(req, ()))
+      #assert ifc not in reqs
     
     # requirements subsume
     for (pkg,a),reqs in pkg_ifc_reqs.iteritems():
@@ -151,21 +158,21 @@ class Repo(object):
           topreps.append(r)
     topsort(ifcs)
     
-    glbs = {}
-    lubs = {}
-    for a in topreps:
-      glbs[a] = set(eqrep[b] for b in ifc_subs[a] if eqrep[b] != a)
-      for b in ifc_subs[a]:
-        b = eqrep[b]
-        if a != b:
-          glbs[a].difference_update(eqrep[c] for c in ifc_subs[b] if eqrep[c] != b)
+    #glbs = {}
+    #lubs = {}
+    #for a in topreps:
+      #glbs[a] = set(eqrep[b] for b in ifc_subs[a] if eqrep[b] != a)
+      #for b in ifc_subs[a]:
+        #b = eqrep[b]
+        #if a != b:
+          #glbs[a].difference_update(eqrep[c] for c in ifc_subs[b] if eqrep[c] != b)
     
-      lubs[a] = set(eqrep[b] for b in ifc_bigs[a] if eqrep[b] != a)
-      for b in ifc_bigs[a]:
-        b = eqrep[b]
-        if a != b:
-          lubs[a].difference_update(eqrep[c] for c in ifc_bigs[b] if eqrep[c] != b)
-    
+      #lubs[a] = set(eqrep[b] for b in ifc_bigs[a] if eqrep[b] != a)
+      #for b in ifc_bigs[a]:
+        #b = eqrep[b]
+        #if a != b:
+          #lubs[a].difference_update(eqrep[c] for c in ifc_bigs[b] if eqrep[c] != b)
+  
     me._pkg_imps = pkg_imps
     me._pkgs = frozenset(pkg_imps)
     me._pkg_ifc_reqs = pkg_ifc_reqs
@@ -176,8 +183,8 @@ class Repo(object):
     me._eqrep = eqrep
     me._eqset = dict((i,frozenset(s)) for i,s in eqset.iteritems())
     me._topreps = topreps
-    me._glbreps = glbs
-    me._lubreps = lubs
+    #me._glbreps = glbs
+    #me._lubreps = lubs
   
   def packages(me):
     return me._pkgs

@@ -48,11 +48,20 @@ class PackageScript(Package):
       if isinstance(imps, dict):
         yield async.Result(imps)
       else:
-        yield async.Result(imps(opts))
+        yield async.Result(imps(lambda x: ctx['opt',x]))
     
     if me._imps is None:
       if me._ns is None:
-        me._imps = yield async.Sync(oven.memo_a(load_imps_a, {'py':me._py}))
+        def args(py):
+          def a(x):
+            if x=='py':
+              return py
+            elif type(x) is tuple and len(x)==2 and x[0]=='opt':
+              return opts(x[1])
+            else:
+              return None
+          return a
+        me._imps = yield async.Sync(oven.memo_a(load_imps_a, args(me._py)))
         me._ns = box[0]
       else:
         me._imps = me._ns['implements']
@@ -153,7 +162,6 @@ class PackageAptGet(Package):
       yield async.Sync(c.exec_a())
       yield async.Result(None)
     return build_a
-
 
 def required_ifcs(ctx, ifcs):
   def args_notag(xs):

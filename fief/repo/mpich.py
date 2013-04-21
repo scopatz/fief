@@ -3,8 +3,12 @@ import os
 from fief import async, Cmd, easy, EnvDelta, Imp
 
 implements = {
-  'mpi3': Imp(requires='cc', subsumes=['mpi1','mpi2']),
-  'mpi3-fortran': Imp(requires='fortran', subsumes=['mpi3','mpi1-fortran','mpi2-fortran']),
+  'mpi1': Imp(requires=['cc'], directly=False),
+  'mpi2': Imp(subsumes=['mpi1'], directly=False),
+  'mpi3': Imp(subsumes=['mpi2']),
+  'mpi1-fortran': Imp(requires=['fortran'], subsumes=['mpi1'], directly=False),
+  'mpi2-fortran': Imp(subsumes=['mpi2','mpi1-fortran'], directly=False),
+  'mpi3-fortran': Imp(subsumes=['mpi3','mpi2-fortran'])
 }
 
 def deliverable_envdelta(ifc, built, delv):
