@@ -29,7 +29,8 @@ class Fief(object):
     
     pkg_ifx = {}
     for pkg,pobj in me.packages.iteritems():
-      pkg_ifx[pkg] = yield async.Sync(pobj.implements_a(me.oven))
+      opts = (lambda pkg: lambda x: me._opt(pkg, x))(pkg)
+      pkg_ifx[pkg] = yield async.Sync(pobj.implements_a(opts, me.oven))
     
     me.repo = repository.Repo(pkg_ifx)
     

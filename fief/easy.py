@@ -15,7 +15,7 @@ class PackageSys(Package):
   def source(me):
     return None
   
-  def implements_a(me, oven):
+  def implements_a(me, opts, oven):
     yield async.Result({me._ifc: Imp()})
   
   def deliverer(me):
@@ -36,14 +36,19 @@ class PackageScript(Package):
   def source(me):
     return me._src
   
-  def implements_a(me, oven):
+  def implements_a(me, opts, oven):
     box = [None]
     def load_imps_a(ctx):
       py = ctx['py']
       ctx.infile(py)
-      box[0] = {}
-      execfile(py, box[0], box[0])
-      yield async.Result(box[0]['implements'])
+      ns = {}
+      box[0] = ns
+      execfile(py, ns, ns)
+      imps = ns['implements']
+      if isinstance(imps, dict):
+        yield async.Result(imps)
+      else:
+        yield async.Result(imps(opts))
     
     if me._imps is None:
       if me._ns is None:
@@ -82,7 +87,7 @@ class PackageConfigMakeInstall(Package):
   def source(me):
     return me._src
   
-  def implements_a(me, oven):
+  def implements_a(me, opts, oven):
     yield async.Result(me._imps)
   
   def deliverer(me):
@@ -132,7 +137,7 @@ class PackageAptGet(Package):
   def source(me):
     return None
   
-  def implements_a(me, oven):
+  def implements_a(me, opts, oven):
     yield async.Result(dict((i,Imp()) for i in me._ifcs))
   
   def deliverer(me):
@@ -148,7 +153,8 @@ class PackageAptGet(Package):
       yield async.Sync(c.exec_a())
       yield async.Result(None)
     return build_a
-  
+
+
 def required_ifcs(ctx, ifcs):
   def args_notag(xs):
     a = ctx.args(xs)

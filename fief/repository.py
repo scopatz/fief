@@ -6,26 +6,29 @@ import async
 ensure_frozenset = lambda x: frozenset(x if hasattr(x, '__iter__') else (x,))
 
 class Imp(object):
-  def __init__(me, subsumes=(), requires=()):
+  def __init__(me, subsumes=(), requires=(), directly=True):
     me.subsumes = ensure_frozenset(subsumes)
     me.requires = ensure_frozenset(requires)
+    me.directly = bool(directly)
   
-  def __repr__(self):
-    s = "Imp(subsumes={0!r}, requires={1!r})"
-    return s.format(self.subsumes, self.requires)
+  def __repr__(me):
+    s = "Imp(subsumes={0!r}, requires={1!r}, directly={2!r})"
+    return s.format(me.subsumes, me.requires, me.directly)
   
   def __getstate__(me):
-    return (me.subsumes, me.requires)
+    return (me.subsumes, me.requires, me.directly)
   
   def __setstate__(me, st):
-    me.subsumes, me.requires = st
+    me.subsumes, me.requires, me.directly = st
 
 class Package(object):
   def source(me):
     raise Exception('Not implemented.')
   
-  def implements_a(me, oven):
-    """returns {ifc: Imp}"""
+  def implements_a(me, opts, oven):
+    """opts: opt->value
+    oven: bake.Oven
+    returns {ifc: Imp}"""
     raise Exception('Not implemented.')
   
   def deliverer(me):
@@ -56,9 +59,14 @@ class Repo(object):
       for ifc,imp in imps.iteritems():
         ifcs.add(ifc)
         
-        if ifc not in ifc_imps:
-          ifc_imps[ifc] = set()
-        ifc_imps[ifc].add(pkg)
+        if imp.directly:
+          if pkg not in pkg_imps:
+            pkg_imps[pkg] = {}
+          pkg_imps[pkg][ifc] = imp
+          
+          if ifc not in ifc_imps:
+            ifc_imps[ifc] = set()
+          ifc_imps[ifc].add(pkg)
         
         if ifc not in ifc_subs:
           ifc_subs[ifc] = set([ifc])
