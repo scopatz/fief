@@ -4,6 +4,7 @@ already be installed on the system and a fairly solid internet connection.
 import os
 import sys
 import shutil
+import urllib
 cwd = os.getcwd()
 if cwd not in sys.path:
     sys.path.insert(0, cwd)
@@ -11,8 +12,6 @@ if cwd not in sys.path:
 import urllib
 import subprocess
 from zipfile import ZipFile
-
-from fief.fetch import retrieve_http
 
 BOOTSTRAP = os.path.split(__file__)[0]
 BUILD = os.path.abspath('build')
@@ -23,6 +22,32 @@ MINGW_GET_URL = 'http://sourceforge.net/projects/mingw/files/Installer/mingw-get
 PYTHON_URL = 'http://www.python.org/ftp/python/2.7.3/python-2.7.3.msi'
 
 MAKENSIS = os.path.join('C:\\', 'Program Files', 'NSIS', 'makensis.exe')
+
+def retrieve_http(url, filename, tag=None):
+    def hook(nblks, bytes_per_blk, fsize):
+        r = min(max(3, int(fsize/1048576)), 1000) 
+        totblks = 1 + fsize / bytes_per_blk
+        if not (0 == nblks%(totblks/r) or totblks == nblks):
+            return 
+        msg = '[GET' + ('] ' if tag is None else ': {0}] '.format(tag))
+        if nblks == 0:
+            msg += 'downloading {0} -> {1}\n'.format(url, filename)
+        else:
+            msg += '{0:.1%} completed\n'.format(nblks / float(totblks))
+        sys.stderr.write(msg)
+    
+    def retriever():
+        try:
+            dname = os.path.split(filename)[0]
+            if not os.path.exists(dname):
+                os.makedirs(dname)
+            fname, hdrs = urllib.urlretrieve(url, filename, hook)
+            got = True
+        except urllib.ContentTooShortError:
+            got = False
+        return got
+
+    return retriever
 
 def ensure_dir(d):
     if not os.path.exists(d):
