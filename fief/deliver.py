@@ -66,8 +66,10 @@ def deliver_a(fief, ifcs, lazy=False):
         return soln.get(x[1])
       elif x[0]=='option':
         return fief.option(x[1], x[2])
-      elif x[0]=='pkg_ifc_requires':
-        return fief.repo.pkg_ifc_requires(x[1], x[2])
+      elif x[0]=='pkg_ifc_buildreqs':
+        return fief.repo.pkg_ifc_buildreqs(x[1], x[2])
+      elif x[0]=='pkg_ifc_runreqs':
+        return fief.repo.pkg_ifc_runreqs(x[1], x[2])
       elif x[0]=='pkg_implements':
         return fief.repo.pkg_implements(x[1])
       else:
@@ -78,7 +80,7 @@ def deliver_a(fief, ifcs, lazy=False):
   # search memo cache for all built packages
   def argstest(soln, xs, nextm):
     if any(type(x) is tuple and len(x)>1 and x[0]=='implementor' for x in xs):
-      return nextm # == lambda x: nextm(m) -- this means match anything
+      return nextm # == lambda x: nextm(x) -- this means match anything
     else:
       return bake.TestEqualAny((tuple(argget(x) for x in xs),), nextm)
   
@@ -141,15 +143,18 @@ def deliver_a(fief, ifcs, lazy=False):
       solnh = soln_hash(soln_fragment(soln, pkg))
       pkg_imps = fief.repo.pkg_implements(pkg)
       imps = frozenset(i for i in pkg_imps if soln[i]==pkg)
-      reqs = fief.repo.pkg_ifcs_requires(pkg, imps)
-      req_slims = [('slim',i) for i in reqs]
-      req_fats = set(soln[i] for i in reqs)
-      req_fats = [('fat',p,soln_hash(soln_fragment(soln,p))) for p in req_fats]
+      breqs = fief.repo.pkg_ifcs_buildreqs(pkg, imps)
+      breq_slims = [('slim',i) for i in breqs]
+      breq_fats = set(soln[i] for i in breqs)
+      breq_fats = [('fat',p,soln_hash(soln_fragment(soln,p))) for p in breq_fats]
+      rreqs = fief.repo.pkg_ifcs_runreqs(pkg, imps)
+      rreqs = [('slim',i) for i in rreqs]
       
       fat_pkgs['fat',pkg,solnh] = {
         ('fat',pkg,solnh): Imp(
           subsumes=(('slim',i) for i in fief.repo.ifcs_subsets(imps)),
-          requires=req_slims + req_fats
+          buildreqs=breq_slims + breq_fats,
+          runreqs=rreqs
         )
       }
   
@@ -159,8 +164,9 @@ def deliver_a(fief, ifcs, lazy=False):
       imps_slim = {}
       for i,imp in fief.repo.pkg_implements(pkg).iteritems():
         imps_slim['slim',i] = Imp(
-          (('slim',i) for i in imp.subsumes),
-          (('slim',i) for i in imp.requires)
+          subsumes=(('slim',i) for i in imp.subsumes),
+          buildreqs=(('slim',i) for i in imp.buildreqs),
+          runreqs=(('slim',i) for i in imp.runreqs)
         )
       fat_pkgs['slim',pkg] = imps_slim
 

@@ -173,7 +173,7 @@ def required_ifcs(ctx, ifcs):
   while len(more) > 0:
     ifc_imp = args_notag(('implementor',i) for i in more)
     del more[:]
-    pkg_ifc_reqs = args_notag(('pkg_ifc_requires',p,i) for i,p in ifc_imp.iteritems() if p is not None)
+    pkg_ifc_reqs = args_notag(('pkg_ifc_reqs',p,i) for i,p in ifc_imp.iteritems() if p is not None)
     reqs = set(chain(*pkg_ifc_reqs.values()))
     for i in reqs:
       if i not in ifcs:
@@ -294,6 +294,10 @@ packages = {
   'cmake': PackageScript(
       source='http://www.cmake.org/files/v2.8/cmake-2.8.10.2.tar.gz',
       py_file=_repo_py('cmake.py')
+    ),
+  'gcc': PackageScript(
+      source='ftp://ftp.gnu.org/gnu/gcc/gcc-4.8.0/gcc-4.8.0.tar.bz2',
+      py_file=_repo_py('gcc.py')
     ),
   'hdf5': PackageScript(
       source='http://www.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8.10-patch1/src/hdf5-1.8.10-patch1.tar.bz2',

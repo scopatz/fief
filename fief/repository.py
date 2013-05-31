@@ -13,20 +13,24 @@ def freeze(ty, x):
     return ty((x,))
 
 class Imp(object):
-  def __init__(me, subsumes=(), requires=(), directly=True):
+  def __init__(me, subsumes=(), requires=None, buildreqs=None, runreqs=None, directly=True):
     me.subsumes = freeze(frozenset, subsumes)
-    me.requires = freeze(frozenset, requires)
+    if requires is not None:
+      me.buildreqs = me.runreqs = freeze(frozenset, requires)
+    else:
+      me.buildreqs = freeze(frozenset, buildreqs or ())
+      me.runreqs = freeze(frozenset, runreqs or ())
     me.directly = bool(directly)
   
   def __repr__(me):
-    s = "Imp(subsumes={0!r}, requires={1!r}, directly={2!r})"
-    return s.format(me.subsumes, me.requires, me.directly)
+    s = "Imp(subsumes={0!r}, build_reqs={1!r}, run_reqs(2!r}, directly={3!r})"
+    return s.format(me.subsumes, me.buildreqs, me.runreqs, me.directly)
   
   def __getstate__(me):
-    return (me.subsumes, me.requires, me.directly)
+    return (me.subsumes, me.buildreqs, me.runreqs, me.directly)
   
   def __setstate__(me, st):
-    me.subsumes, me.requires, me.directly = st
+    me.subsumes, me.buildreqs, me.runreqs, me.directly = st
 
 class Package(object):
   def source(me):
@@ -55,7 +59,8 @@ class Package(object):
 class Repo(object):
   def __init__(me, pkg_imps):
     """pkg_imps: {pkg: {ifc: Imp}}"""
-    pkg_ifc_reqs = {} # {(pkg,ifc):set(ifc)}
+    pkg_ifc_breqs = {} # {(pkg,ifc):set(ifc)}
+    pkg_ifc_rreqs = {} # {(pkg,ifc):set(ifc)}
     ifcs = set()
     pkg_imps = dict(pkg_imps)
     ifc_imps = {}
@@ -79,10 +84,11 @@ class Repo(object):
           ifc_subs[ifc] = set([ifc])
         ifc_subs[ifc].update(imp.subsumes)
         
-        pkg_ifc_reqs[pkg,ifc] = set(imp.requires)
-        
+        pkg_ifc_breqs[pkg,ifc] = set(imp.buildreqs)
+        pkg_ifc_rreqs[pkg,ifc] = set(imp.runreqs)
         ifcs.update(ifc_subs[ifc])
-        ifcs.update(pkg_ifc_reqs[pkg,ifc])
+        ifcs.update(pkg_ifc_breqs[pkg,ifc])
+        ifcs.update(pkg_ifc_rreqs[pkg,ifc])
     
     for ifc in ifcs:
       if ifc not in ifc_subs:
@@ -120,9 +126,10 @@ class Repo(object):
       #assert ifc not in reqs
     
     # requirements subsume
-    for (pkg,a),reqs in pkg_ifc_reqs.iteritems():
-      for b in ifc_subs[a]:
-        reqs.update(pkg_ifc_reqs.get((pkg,b), ()))
+    for preqs in (pkg_ifc_breqs, pkg_ifc_rreqs):
+      for (pkg,a),reqs in preqs.iteritems():
+        for b in ifc_subs[a]:
+          reqs.update(preqs.get((pkg,b), ()))
     
     # partition into equivalence classes
     eqrep = {}
@@ -175,7 +182,8 @@ class Repo(object):
   
     me._pkg_imps = pkg_imps
     me._pkgs = frozenset(pkg_imps)
-    me._pkg_ifc_reqs = pkg_ifc_reqs
+    me._pkg_ifc_breqs = pkg_ifc_breqs
+    me._pkg_ifc_rreqs = pkg_ifc_rreqs
     me._ifcs = frozenset(ifcs)
     me._ifc_imps = dict((ifc,frozenset(pkgs)) for ifc,pkgs in ifc_imps.iteritems())
     me._ifc_subs = dict((ifc,frozenset(subs)) for ifc,subs in ifc_subs.iteritems())
@@ -219,17 +227,30 @@ class Repo(object):
     """Maps package to {ifc:Imp} dictionary."""
     return me._pkg_imps.get(pkg, {})
   
-  def pkg_ifc_requires(me, pkg, ifc):
+  def pkg_ifc_buildreqs(me, pkg, ifc):
     """Returns set of interfaces that are required if `pkg` were to implement `ifc`.
     Returned set of interfaces not closed under subsumption."""
-    return me._pkg_ifc_reqs.get((pkg,ifc), frozenset())
+    return me._pkg_ifc_breqs.get((pkg,ifc), frozenset())
   
-  def pkg_ifcs_requires(me, pkg, ifcs):
-    """union(pkg_ifc_subs(pkg,i) for i in ifcs)"""
+  def pkg_ifc_runreqs(me, pkg, ifc):
+    """Returns set of interfaces that are required if `pkg` were to implement `ifc`.
+    Returned set of interfaces not closed under subsumption."""
+    return me._pkg_ifc_rreqs.get((pkg,ifc), frozenset())
+  
+  def pkg_ifcs_buildreqs(me, pkg, ifcs):
+    """union(pkg_ifc_buildreqs(pkg,i) for i in ifcs)"""
     un = set()
     for i in ifcs:
-      if (pkg,i) in me._pkg_ifc_reqs:
-        un.update(me._pkg_ifc_reqs[pkg,i])
+      if (pkg,i) in me._pkg_ifc_breqs:
+        un.update(me._pkg_ifc_breqs[pkg,i])
+    return un
+  
+  def pkg_ifcs_runreqs(me, pkg, ifcs):
+    """union(pkg_ifc_runreqs(pkg,i) for i in ifcs)"""
+    un = set()
+    for i in ifcs:
+      if (pkg,i) in me._pkg_ifc_rreqs:
+        un.update(me._pkg_ifc_rreqs[pkg,i])
     return un
   
   def min_ifcs(me, ifcs):

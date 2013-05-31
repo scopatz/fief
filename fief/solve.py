@@ -1,8 +1,8 @@
 import sys
 
-def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
-  """Returns an iterable of dicts that map interfaces to packages.
-  Each dict will be complete with all dependencies and subsumed interfaces.
+def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, strip=()):
+  """Returns the dict that maps interfaces to packages.
+  It will be complete with all runtime dependencies and subsumed interfaces.
   
   repo: repository.Repo
   ifcs: iterable of initial required interfaces
@@ -67,7 +67,7 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    for i in repo.pkg_ifc_requires(pkg, ifc):
+    for i in repo.pkg_ifc_runreqs(pkg, ifc):
       if i not in world:
         unbound.add(i)
         unbound_adds.append(i)
@@ -149,4 +149,12 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
               yield soln
             revert()
   
-  return branch()
+  numsoln = 0
+  for soln in branch():
+    if numsoln = 1:
+      raise SolutionError("Interface solution ambiguity.")
+    ans = soln
+    numsoln += 1
+  if numsoln == 0:
+    raise SolutionError("Interfaces insolvable.")
+  return ans
