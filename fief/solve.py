@@ -1,6 +1,12 @@
 import sys
+from collections import namedtuple
 
-def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, strip=()):
+SubBuild = namedtuple('SubBuild', ['pkg','build_soln'])
+
+def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
+  """Returns type T such that T = {ifc:(pkg:pkg, build_soln:T)}"""
+  
+def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, strip=()):
   """Returns the dict that maps interfaces to packages.
   It will be complete with all runtime dependencies and subsumed interfaces.
   
