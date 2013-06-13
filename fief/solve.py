@@ -1,12 +1,42 @@
 import sys
 from collections import namedtuple
 
-SubBuild = namedtuple('SubBuild', ['pkg','build_soln'])
+from repository import Repo, Imp
+
+Soln = namedtuple('Soln', ['ifc2pkg','pkg2soln'])
 
 def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
-  """Returns type T such that T = {ifc:(pkg:pkg, build_soln:T)}"""
+  """Returns type T such that T = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:T})"""
   
-def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, strip=()):
+  s = solve_runtime(repo, ifcs, pref, imply)
+  ps = set(s.itervalues())
+  p_breq = {}
+  p_bup = {}
+  for p in ps:
+    imps = set(i for i in repo.pkg_implements(p) if s[i] == p)
+    p_breq[p] = repo.pkg_ifcs_buildreqs(p, imps)
+    for i in p_breq[p]:
+      p1 = s[i]
+      p_bup[p1] = p_bup.get(p1, set())
+      p_bup[p1].add(p)
+  
+  # close p_bup
+  again = True
+  while again:
+    again = False
+    for a in p_bup:
+      for b in p_bup[a]:
+        n0 = len(p_bup[a])
+        p_bup[a].update(p_bup.get(b, ()))
+        again = again or n0 != len(p_bup[a])
+  
+  pkg2soln = {}
+  for p in ps:
+    pkg2soln[p] = solve(constrain(repo, p_bup.get(p,()), s), p_breq[p], pref)
+  
+  return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
+  
+def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   """Returns the dict that maps interfaces to packages.
   It will be complete with all runtime dependencies and subsumed interfaces.
   
