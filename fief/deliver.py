@@ -15,9 +15,6 @@ import valtool
 
 Imp = repository.Imp
 
-class SolutionError(Exception):
-  pass
-
 def deliver_a(fief, ifcs, lazy=False):
   """
   When lazy=True, returns (ifc2pkg, will_build) where:

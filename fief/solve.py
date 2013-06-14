@@ -5,15 +5,18 @@ from repository import Repo, Imp
 
 Soln = namedtuple('Soln', ['ifc2pkg','pkg2soln'])
 
-def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
-  """Returns type T such that T = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:T})"""
+class SolutionError(Exception):
+  pass
+
+def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lambda p:2):
+  """Returns value of type Soln such that Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})"""
   
   s = solve_runtime(repo, ifcs, pref, imply)
   ps = set(s.itervalues())
-  p_breq = {}
-  p_bup = {}
+  p_breq = {} # pkg -> ifcs needed for building
+  p_bup = {} # pkg -> pkgs built using this package
   for p in ps:
-    imps = set(i for i in repo.pkg_implements(p) if s[i] == p)
+    imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
     p_breq[p] = repo.pkg_ifcs_buildreqs(p, imps)
     for i in p_breq[p]:
       p1 = s[i]
@@ -30,9 +33,27 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
         p_bup[a].update(p_bup.get(b, ()))
         again = again or n0 != len(p_bup[a])
   
+  def constrain(repo, rank, soln):
+    ifx = {}
+    for p in repo.packages():
+      imps = {}
+      if rank(p) > 0:
+        for i,imp in repo.pkg_implements(p).iteritems():
+          if i not in soln or soln[i] == p:
+            imps[i] = imp
+      ifx[p] = imps
+    return Repo(ifx)
+  
   pkg2soln = {}
   for p in ps:
-    pkg2soln[p] = solve(constrain(repo, p_bup.get(p,()), s), p_breq[p], pref)
+    def rank1():
+      strip = p_bup.get(p,())
+      return lambda p: rank(p) - (1 if p in strip else 0)
+    rank1 = rank1()
+    pkg2soln[p] = solve(
+      constrain(repo, rank1, s),
+      ifcs=p_breq[p], pref=pref, rank=rank1
+    )
   
   return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
   
@@ -187,10 +208,19 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   
   numsoln = 0
   for soln in branch():
-    if numsoln = 1:
+    if numsoln == 1:
       raise SolutionError("Interface solution ambiguity.")
     ans = soln
     numsoln += 1
   if numsoln == 0:
-    raise SolutionError("Interfaces insolvable.")
+    raise SolutionError("Interfaces unsolvable.")
   return ans
+
+def test():
+  ps = {'gcc':{'cc':Imp(buildreqs=['cc','mpr'])},'bad':{'cc':Imp()},'gmpr':{'mpr':Imp(buildreqs=['cc'])}}
+  def pref(i,ps):
+    if i=='cc' and 'gcc' in ps:
+      return ['gcc']
+    else:
+      return []
+  print solve(Repo(ps), ['cc'], pref)
