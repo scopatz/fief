@@ -23,8 +23,27 @@ class Imp(object):
     me.directly = bool(directly)
   
   def __repr__(me):
-    s = "Imp(subsumes={0!r}, build_reqs={1!r}, run_reqs={2!r}, directly={3!r})"
-    return s.format(me.subsumes, me.buildreqs, me.runreqs, me.directly)
+    f = []
+    x = []
+    if len(me.subsumes) > 0:
+      f.append("subsumes=%r")
+      x.append(list(me.subsumes))
+    if me.buildreqs == me.runreqs:
+      if len(me.buildreqs) > 0:
+        f.append("requires=%r")
+        x.append(list(me.buildreqs))
+    else:
+      if len(me.buildreqs) > 0:
+        f.append("buildreqs=%r")
+        x.append(list(me.buildreqs))
+      if len(me.runreqs) > 0:
+        f.append("runreqs=%r")
+        x.append(list(me.runreqs))
+    if me.directly == False:
+      f.append("directly=%r")
+      x.append(me.directly)
+    s = "Imp(" + ",".join(f) + ")"
+    return s % tuple(x)
   
   def __getstate__(me):
     return (me.subsumes, me.buildreqs, me.runreqs, me.directly)

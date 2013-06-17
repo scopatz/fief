@@ -11,7 +11,8 @@ class SolutionError(Exception):
 def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lambda p:2):
   """Returns value of type Soln such that Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})"""
   
-  s = solve_runtime(repo, ifcs, pref, imply)
+  print 'solve_flat ifcs:',ifcs,' repo:',dict((p,repo.pkg_implements(p)) for p in repo.packages())
+  s = solve_flat(repo, ifcs, pref, imply)
   ps = set(s.itervalues())
   p_breq = {} # pkg -> ifcs needed for building
   p_bup = {} # pkg -> pkgs built using this package
@@ -28,7 +29,7 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lamb
   while again:
     again = False
     for a in p_bup:
-      for b in p_bup[a]:
+      for b in list(p_bup[a]):
         n0 = len(p_bup[a])
         p_bup[a].update(p_bup.get(b, ()))
         again = again or n0 != len(p_bup[a])
@@ -36,12 +37,8 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lamb
   def constrain(repo, rank, soln):
     ifx = {}
     for p in repo.packages():
-      imps = {}
       if rank(p) > 0:
-        for i,imp in repo.pkg_implements(p).iteritems():
-          if i not in soln or soln[i] == p:
-            imps[i] = imp
-      ifx[p] = imps
+        ifx[p] = repo.pkg_implements(p)
     return Repo(ifx)
   
   pkg2soln = {}
@@ -57,7 +54,7 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lamb
   
   return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
   
-def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
+def solve_flat(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   """Returns the dict that maps interfaces to packages.
   It will be complete with all runtime dependencies and subsumed interfaces.
   
@@ -124,7 +121,7 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    for i in repo.pkg_ifc_runreqs(pkg, ifc):
+    for i in list(repo.pkg_ifc_runreqs(pkg, ifc)) + list(repo.pkg_ifc_buildreqs(pkg, ifc)):
       if i not in world:
         unbound.add(i)
         unbound_adds.append(i)
@@ -217,10 +214,14 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   return ans
 
 def test():
-  ps = {'gcc':{'cc':Imp(buildreqs=['cc','mpr'])},'bad':{'cc':Imp()},'gmpr':{'mpr':Imp(buildreqs=['cc'])}}
+  repo = Repo({
+    'gcc':{'cc':Imp(buildreqs=['cc','mpr'])},
+    'bad':{'cc':Imp()},
+    'gmpr':{'mpr':Imp(buildreqs=['cc'])}
+  })
   def pref(i,ps):
     if i=='cc' and 'gcc' in ps:
       return ['gcc']
     else:
       return []
-  print solve(Repo(ps), ['cc'], pref)
+  print solve(repo, ['cc'], pref)
