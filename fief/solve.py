@@ -29,10 +29,10 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lamb
   while again:
     again = False
     for a in p_bup:
+      n0 = len(p_bup[a])
       for b in list(p_bup[a]):
-        n0 = len(p_bup[a])
         p_bup[a].update(p_bup.get(b, ()))
-        again = again or n0 != len(p_bup[a])
+      again = again or n0 != len(p_bup[a])
   
   def constrain(repo, rank, soln):
     ifx = {}
