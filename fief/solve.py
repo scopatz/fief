@@ -8,44 +8,29 @@ Soln = namedtuple('Soln', ['ifc2pkg','pkg2soln'])
 class SolutionError(Exception):
   pass
 
-def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lambda p:2):
+def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lambda p:0):
   """Returns value of type Soln such that Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})"""
   
-  print 'solve_flat ifcs:',ifcs,' repo:',dict((p,repo.pkg_implements(p)) for p in repo.packages())
-  s = solve_flat(repo, ifcs, pref, imply)
+  print 'solve_runtime ifcs:',ifcs,' repo:',dict((p,repo.pkg_implements(p)) for p in repo.packages())
+  s = solve_runtime(repo, ifcs, pref, imply)
   ps = set(s.itervalues())
   p_breq = {} # pkg -> ifcs needed for building
-  p_bup = {} # pkg -> pkgs built using this package
   for p in ps:
     imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
     p_breq[p] = repo.pkg_ifcs_buildreqs(p, imps)
-    for i in p_breq[p]:
-      p1 = s[i]
-      p_bup[p1] = p_bup.get(p1, set())
-      p_bup[p1].add(p)
-  
-  # close p_bup
-  again = True
-  while again:
-    again = False
-    for a in p_bup:
-      n0 = len(p_bup[a])
-      for b in list(p_bup[a]):
-        p_bup[a].update(p_bup.get(b, ()))
-      again = again or n0 != len(p_bup[a])
   
   def constrain(repo, rank, soln):
     ifx = {}
     for p in repo.packages():
-      if rank(p) > 0:
+      if rank(p) < 2:
         ifx[p] = repo.pkg_implements(p)
     return Repo(ifx)
   
   pkg2soln = {}
   for p in ps:
     def rank1():
-      strip = p_bup.get(p,())
-      return lambda p: rank(p) - (1 if p in strip else 0)
+      p0 = p
+      return lambda p: rank(p) + (1 if p == p0 else 0)
     rank1 = rank1()
     pkg2soln[p] = solve(
       constrain(repo, rank1, s),
@@ -54,7 +39,7 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lamb
   
   return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
   
-def solve_flat(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
+def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   """Returns the dict that maps interfaces to packages.
   It will be complete with all runtime dependencies and subsumed interfaces.
   
@@ -121,7 +106,7 @@ def solve_flat(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    for i in list(repo.pkg_ifc_runreqs(pkg, ifc)) + list(repo.pkg_ifc_buildreqs(pkg, ifc)):
+    for i in repo.pkg_ifc_runreqs(pkg, ifc):
       if i not in world:
         unbound.add(i)
         unbound_adds.append(i)
@@ -213,7 +198,7 @@ def solve_flat(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
     raise SolutionError("Interfaces unsolvable.")
   return ans
 
-def test():
+def test(ifcs=['cc']):
   repo = Repo({
     'gcc':{'cc':Imp(buildreqs=['cc','mpr'])},
     'bad':{'cc':Imp()},
@@ -224,4 +209,4 @@ def test():
       return ['gcc']
     else:
       return []
-  print solve(repo, ['cc'], pref)
+  return solve(repo, ifcs, pref)
