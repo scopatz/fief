@@ -38,8 +38,27 @@ def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lamb
     )
   
   return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
-  
-def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
+
+def implicate(repo, ifcs, imply=lambda x,on: False):
+  dep = {}
+  lfp = set(ifcs)
+  more = repo.interfaces()
+  while len(more) > 0:
+    more0 = more
+    more = []
+    for x in more0:
+      def spy(y):
+        dep[y] = dep.get(y, set())
+        dep[y].add(x)
+        return y in lfp
+      if imply(x, spy):
+        for x1 in repo.ifc_subsets(x):
+          if x1 not in lfp:
+            lfp.add(x1)
+            more.extend(dep.get(x1, ()))
+  return lfp
+
+def solve2(repo, ifcs, pref=lambda i,ps:None):
   """Returns the dict that maps interfaces to packages.
   It will be complete with all runtime dependencies and subsumed interfaces.
   
@@ -56,24 +75,7 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
   bound = {} # bound interfaces, closed by subsumption
   unbound = set(ifcs) # interfaces required but not yet bound
   world = repo.ifcs_subsets(unbound) # all interfaces ever required closed by subsumption
-  idep = {} # implication dependencies
-  
-  more = repo.interfaces()
-  while len(more) > 0:
-    more0 = more
-    more = []
-    for x in more0:
-      if x not in world:
-        def spy(y):
-          idep[y] = idep.get(y, set())
-          idep[y].add(x)
-          return y in world
-        if imply(x, spy):
-          unbound.add(x)
-          for x1 in repo.ifc_subsets(x):
-            if x1 not in world:
-              world.add(x1)
-              more.extend(idep.get(x1, ()))
+  bdep = {} # maps ifc x to pkgs which have a build dependency on x
   
   # returns revert lambda if successful, otherwise None
   def bind(ifc, pkg):
@@ -81,6 +83,7 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
     bound_adds = []
     unbound_dels = []
     unbound_adds = []
+    bdep_adds = {}
     
     def revert():
       world.difference_update(world_adds)
@@ -88,6 +91,8 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
         del bound[i]
       unbound.difference_update(unbound_adds)
       unbound.update(unbound_dels)
+      for i in bdep_adds:
+        bdep[i].difference_update(bdep_adds[i])
     
     for i in repo.ifc_subsets(ifc):
       if i not in world:
@@ -106,7 +111,14 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    for i in repo.pkg_ifc_runreqs(pkg, ifc):
+    bdep[ifc] = bdep.get(ifc,set())
+    bdep[ifc].add(pkg)
+    breqs = repo.pkg_ifc_buildreqs(pkg, ifc)
+    for br in breqs:
+      if bdep.get(br,())
+
+    rreqs = list(repo.pkg_ifc_runreqs(pkg, ifc))
+    for i in reqs:
       if i not in world:
         unbound.add(i)
         unbound_adds.append(i)
@@ -114,27 +126,6 @@ def solve_runtime(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False):
           if i1 not in world:
             world.add(i1)
             world_adds.append(i1)
-    
-    more = world_adds
-    while len(more) > 0:
-      wake = set()
-      for x in more:
-        wake.update(idep.get(x, ()))
-      more = []
-      for x in wake:
-        if x not in world:
-          def spy(y):
-            idep[y] = idep.get(y, set())
-            idep[y].add(x)
-            return y in world
-          if imply(x, spy):
-            unbound.add(x)
-            unbound_adds.append(x)
-            for x1 in repo.ifc_subsets(x):
-              if x1 not in world:
-                world.add(x1)
-                world_adds.append(x1)
-                more.append(x1)
     
     return revert
   
