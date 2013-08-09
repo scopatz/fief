@@ -8,37 +8,6 @@ Soln = namedtuple('Soln', ['ifc2pkg','pkg2soln'])
 class SolutionError(Exception):
   pass
 
-def solve(repo, ifcs, pref=lambda i,ps:None, imply=lambda x,on: False, rank=lambda p:0):
-  """Returns value of type Soln such that Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})"""
-  
-  print 'solve_runtime ifcs:',ifcs,' repo:',dict((p,repo.pkg_implements(p)) for p in repo.packages())
-  s = solve_runtime(repo, ifcs, pref, imply)
-  ps = set(s.itervalues())
-  p_breq = {} # pkg -> ifcs needed for building
-  for p in ps:
-    imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
-    p_breq[p] = repo.pkg_ifcs_buildreqs(p, imps)
-  
-  def constrain(repo, rank, soln):
-    ifx = {}
-    for p in repo.packages():
-      if rank(p) < 2:
-        ifx[p] = repo.pkg_implements(p)
-    return Repo(ifx)
-  
-  pkg2soln = {}
-  for p in ps:
-    def rank1():
-      p0 = p
-      return lambda p: rank(p) + (1 if p == p0 else 0)
-    rank1 = rank1()
-    pkg2soln[p] = solve(
-      constrain(repo, rank1, s),
-      ifcs=p_breq[p], pref=pref, rank=rank1
-    )
-  
-  return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
-
 def implicate(repo, ifcs, imply=lambda x,on: False):
   dep = {}
   lfp = set(ifcs)
@@ -58,24 +27,46 @@ def implicate(repo, ifcs, imply=lambda x,on: False):
             more.extend(dep.get(x1, ()))
   return lfp
 
-def solve2(repo, ifcs, pref=lambda i,ps:None):
+def solve(repo, ifcs, pref=lambda i,ps:None, rank=lambda p:0):
+  """Returns value of type Soln such that Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})"""
+  
+  print 'solve_runtime ifcs:',ifcs,' repo:',dict((p,repo.pkg_implements(p)) for p in repo.packages())
+  s = solve_runtime(repo, ifcs, pref, imply)
+  ps = set(s.itervalues())
+  p_breq = {} # pkg -> ifcs needed for building
+  for p in ps:
+    imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
+    p_breq[p] = repo.pkg_ifcs_buildreqs(p, imps)
+  
+  pkg2soln = {}
+  for p in ps:
+    def rank1():
+      p0 = p
+      return lambda p: rank(p) + (1 if p == p0 else 0)
+    rank1 = rank1()
+    pkg2soln[p] = solve(
+      constrain(repo, rank1, s),
+      ifcs=p_breq[p], pref=pref, rank=rank1
+    )
+  
+  return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
+
+def solve2(repo, unbound, bound={}, pref=lambda i,ps:None):
   """Returns the dict that maps interfaces to packages.
   It will be complete with all runtime dependencies and subsumed interfaces.
   
   repo: repository.Repo
-  ifcs: iterable of initial required interfaces
+  unbound: iterable of initial required interfaces
+  bound: bound interfaces, must be closed under subsumption
   pref: (ifc,pkgs)->[pkg] -- given a choice of implementing packages,
         are there some that would be best?  Solutions beyond those found with
         one of these bindings will be skipped.
-  imply: (ifc,on:ifc->bool)->bool -- test where the given interface should be auto-
-         required based on the current active state of other interfaces
   """
   
   # solver state
-  bound = {} # bound interfaces, closed by subsumption
-  unbound = set(ifcs) # interfaces required but not yet bound
-  world = repo.ifcs_subsets(unbound) # all interfaces ever required closed by subsumption
-  bdep = {} # maps ifc x to pkgs which have a build dependency on x
+  unbound = set(unbound)
+  bound = dict(bound)
+  world = repo.ifcs_subsets(unbound) | set(bound) # all interfaces ever required closed by subsumption
   
   # returns revert lambda if successful, otherwise None
   def bind(ifc, pkg):
@@ -83,7 +74,6 @@ def solve2(repo, ifcs, pref=lambda i,ps:None):
     bound_adds = []
     unbound_dels = []
     unbound_adds = []
-    bdep_adds = {}
     
     def revert():
       world.difference_update(world_adds)
@@ -91,8 +81,6 @@ def solve2(repo, ifcs, pref=lambda i,ps:None):
         del bound[i]
       unbound.difference_update(unbound_adds)
       unbound.update(unbound_dels)
-      for i in bdep_adds:
-        bdep[i].difference_update(bdep_adds[i])
     
     for i in repo.ifc_subsets(ifc):
       if i not in world:
@@ -111,13 +99,7 @@ def solve2(repo, ifcs, pref=lambda i,ps:None):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    bdep[ifc] = bdep.get(ifc,set())
-    bdep[ifc].add(pkg)
-    breqs = repo.pkg_ifc_buildreqs(pkg, ifc)
-    for br in breqs:
-      if bdep.get(br,())
-
-    rreqs = list(repo.pkg_ifc_runreqs(pkg, ifc))
+    reqs = list(repo.pkg_ifc_runreqs(pkg, ifc)) + list(repo.pkg_ifc_buildreqs(pkg, ifc))
     for i in reqs:
       if i not in world:
         unbound.add(i)
