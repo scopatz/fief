@@ -9,45 +9,43 @@ class SolutionError(Exception):
   pass
 
 def implicate(repo, ifcs, imply=lambda x,on: False):
-  dep = {}
-  lfp = set(ifcs)
-  more = repo.interfaces()
-  while len(more) > 0:
-    more0 = more
-    more = []
-    for x in more0:
-      def spy(y):
-        dep[y] = dep.get(y, set())
-        dep[y].add(x)
-        return y in lfp
-      if imply(x, spy):
-        for x1 in repo.ifc_subsets(x):
-          if x1 not in lfp:
-            lfp.add(x1)
-            more.extend(dep.get(x1, ()))
-  return lfp
+  on = set(ifcs)
+  off = set(repo.interfaces())
+  tog = on
+  while len(tog) > 0:
+    off.difference_update(tog)
+    tog = []
+    for x in off:
+      if imply(x, on.__contains__):
+        on.add(x)
+        tog.append(x)
+  return on
 
-def solve(repo, ifcs, pref=lambda i,ps:None, rank=lambda p:0):
-  """Returns value of type Soln such that Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})"""
-  
-  print 'solve_runtime ifcs:',ifcs,' repo:',dict((p,repo.pkg_implements(p)) for p in repo.packages())
-  s = solve_runtime(repo, ifcs, pref, imply)
-  ps = set(s.itervalues())
-  p_breq = {} # pkg -> ifcs needed for building
-  for p in ps:
-    imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
-    p_breq[p] = repo.pkg_ifcs_buildreqs(p, imps)
-  
-  pkg2soln = {}
-  for p in ps:
-    def rank1():
-      p0 = p
-      return lambda p: rank(p) + (1 if p == p0 else 0)
-    rank1 = rank1()
-    pkg2soln[p] = solve(
-      constrain(repo, rank1, s),
-      ifcs=p_breq[p], pref=pref, rank=rank1
-    )
+def solve(repo, ifcs, pref=lambda i,ps:None):
+  """
+  Returns value of type Soln such that
+  Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})
+  """
+  rank = 2
+  while rank >= 0:
+    s = solve2(repo, ifcs, pref)
+    ps = set(s.itervalues())
+    p_breq = {} # pkg -> ifcs needed for building
+    for p in ps:
+      imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
+      p_breq[p] = set(s[i] for i in repo.pkg_ifcs_buildreqs(p, imps))
+    rank -= 1
+    
+    pkg2soln = {}
+    for p in ps:
+      def rank1():
+        p0 = p
+        return lambda p: rank(p) + (1 if p == p0 else 0)
+      rank1 = rank1()
+      pkg2soln[p] = solve(
+        constrain(repo, rank1, s),
+        ifcs=p_breq[p], pref=pref, rank=rank1
+      )
   
   return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
 
@@ -99,7 +97,8 @@ def solve2(repo, unbound, bound={}, pref=lambda i,ps:None):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    reqs = list(repo.pkg_ifc_runreqs(pkg, ifc)) + list(repo.pkg_ifc_buildreqs(pkg, ifc))
+    reqs = list(repo.pkg_ifc_runreqs(pkg, ifc))
+    reqs += repo.pkg_ifc_buildreqs(pkg, ifc)
     for i in reqs:
       if i not in world:
         unbound.add(i)
