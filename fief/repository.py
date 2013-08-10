@@ -297,11 +297,10 @@ class Repo(object):
     eqset = me._eqset
     subs = me._ifc_subs
     m = {}
-    for i in ifcs:
-      i = eqrep[i]
+    for i in set(eqrep[i] for i in ifcs):
       x = None
       for i1 in eqset[i]:
-        x1 = proj(i)
+        x1 = proj(i1)
         if x is None:
           x = x1
         elif x1 is not None and x != x1:
