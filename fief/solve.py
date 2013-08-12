@@ -26,15 +26,39 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
   Returns value of type Soln such that
   Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})
   """
-  rank = 2
-  while rank >= 0:
-    s = solve2(repo, ifcs, pref)
+  solns = []
+  rank = {}
+  while len(ifcs) >= 0:
+    def pref2(i,ps):
+      p = pref(i, set(p for p in ps if rank.get(p,2) != 0))
+      return () if p is None else (p,)
+    s = solve2(repo, ifcs, pref2, set(p for p in repo.packages() if rank.get(p,2) > 0))
+    solns.append(s)
     ps = set(s.itervalues())
-    p_breq = {} # pkg -> ifcs needed for building
+    
+    p_breq = {} # pkg -> pkgs needed for building
     for p in ps:
       imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
       p_breq[p] = set(s[i] for i in repo.pkg_ifcs_buildreqs(p, imps))
-    rank -= 1
+    
+    def tclose(xs):
+      xs = dict((x,set(xs[x])) for x in xs)
+      again = True
+      while again:
+        for x in xs:
+          for y in list(xs[x]):
+            n0 = len(xs[x])
+            xs[x].update(xs[y])
+            again = again or n0 != len(xs[x])
+      return xs
+    
+    p_breq = tclose(p_breq)
+    holes = set(p for p in p_breq if p in p_breq[p])
+    for p in holes:
+      rank[p] = rank.get(p,2) - 1
+    
+    ifcs = holes
+  
     
     pkg2soln = {}
     for p in ps:
@@ -50,8 +74,10 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
   return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
 
 def solve2(repo, unbound, bound={}, pref=lambda i,ps:None):
-  """Returns the dict that maps interfaces to packages.
-  It will be complete with all runtime dependencies and subsumed interfaces.
+  """
+  Returns the dict that maps interfaces to packages.
+  It will be complete with all buildtime/runtime dependencies and subsumed
+  interfaces.
   
   repo: repository.Repo
   unbound: iterable of initial required interfaces
