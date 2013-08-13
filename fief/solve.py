@@ -26,60 +26,81 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
   Returns value of type Soln such that
   Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})
   """
-  solns = []
-  rank = {}
-  while len(ifcs) >= 0:
-    def pref2(i,ps):
-      p = pref(i, set(p for p in ps if rank.get(p,2) != 0))
+  ifcs = frozenset(ifcs)
+  solns = {}
+  holes = {}
+  def down(ifcs, path):
+    def rank(p):
+      return sum(1 if p in hole else 0 for hole in path)
+    def pref2(i, ps):
+      p = pref(i, ps)
       return () if p is None else (p,)
-    s = solve2(repo, ifcs, pref2, set(p for p in repo.packages() if rank.get(p,2) > 0))
-    solns.append(s)
+    pkgs = set(p for p in repo.packages() if rank(p) < 2)
+    s = solve2(repo, pkgs, ifcs, pref2)
+    solns[path] = s
     ps = set(s.itervalues())
     
-    p_breq = {} # pkg -> pkgs needed for building
+    p_reqi = {} # pkg -> set(ifc) needed for building
+    p_reqp = {} # pkg -> set(pkg) needed for building (implementing p_reqi)
     for p in ps:
       imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
-      p_breq[p] = set(s[i] for i in repo.pkg_ifcs_buildreqs(p, imps))
+      p_reqi[p] = repo.pkg_ifcs_buildreqs(p, imps)
+      p_reqp[p] = set(s[i] for i in p_reqi[p])
     
-    def tclose(xs):
-      xs = dict((x,set(xs[x])) for x in xs)
-      again = True
-      while again:
-        for x in xs:
-          for y in list(xs[x]):
-            n0 = len(xs[x])
-            xs[x].update(xs[y])
-            again = again or n0 != len(xs[x])
-      return xs
-    
-    p_breq = tclose(p_breq)
-    holes = set(p for p in p_breq if p in p_breq[p])
-    for p in holes:
-      rank[p] = rank.get(p,2) - 1
-    
-    ifcs = holes
+    holes[path] = cycle_sets(p_reqp)
+    for hole in holes[path]:
+      ifcs = set()
+      for p in hole:
+        ifcs.update(p_reqi[p])
+      down(ifcs, path + (hole,))
+  down(ifcs, ())
   
-    
+  def tree(path):
+    s = solns[path]
+    hole = holes[path]
+    ps = set(s.itervalues())
     pkg2soln = {}
     for p in ps:
-      def rank1():
-        p0 = p
-        return lambda p: rank(p) + (1 if p == p0 else 0)
-      rank1 = rank1()
-      pkg2soln[p] = solve(
-        constrain(repo, rank1, s),
-        ifcs=p_breq[p], pref=pref, rank=rank1
-      )
+      imps = set(i for i in repo.pkg_implements(p) if s.get(i) == p)
+      reqs = repo.pkg_ifcs_runreqs(p, imps)
+      pkg2soln[p] = Soln(ifc2pkg=dict((i,s[i]) for i in reqs)
+    return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
   
-  return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
+    
+def cycle_sets(xs):
+  def tclose(xs):
+    xs = dict((x,set(xs[x])) for x in xs)
+    again = True
+    while again:
+      for x in xs:
+        for y in list(xs[x]):
+          n0 = len(xs[x])
+          xs[x].update(xs[y])
+          again = again or n0 != len(xs[x])
+    return xs
 
-def solve2(repo, unbound, bound={}, pref=lambda i,ps:None):
+  xs = tclose(xs)
+  cy = {}
+  for x in xs:
+    if x in xs[x]:
+      for y in xs[x]:
+        if x in xs[y]:
+          cy[x] = cy.get(x, set((x,)))
+          cy[y] = cy.get(y, set((y,)))
+          cy[x] |= cy[y]
+          for z in cy[y]:
+            cy[z] = cy[x]
+  them = dict((id(s),s) for s in cy.itervalues())
+  return [frozenset(s) for s in them.itervalues()]
+
+def solve2(repo, pkgs, unbound, pref=lambda i,ps:None):
   """
   Returns the dict that maps interfaces to packages.
   It will be complete with all buildtime/runtime dependencies and subsumed
   interfaces.
   
   repo: repository.Repo
+  pkgs: iterable of packages to consider
   unbound: iterable of initial required interfaces
   bound: bound interfaces, must be closed under subsumption
   pref: (ifc,pkgs)->[pkg] -- given a choice of implementing packages,
@@ -87,10 +108,12 @@ def solve2(repo, unbound, bound={}, pref=lambda i,ps:None):
         one of these bindings will be skipped.
   """
   
+  pkgs = set(pkgs)
+  
   # solver state
   unbound = set(unbound)
-  bound = dict(bound)
-  world = repo.ifcs_subsets(unbound) | set(bound) # all interfaces ever required closed by subsumption
+  bound = {}
+  world = repo.ifcs_subsets(unbound) # all interfaces ever required closed by subsumption
   
   # returns revert lambda if successful, otherwise None
   def bind(ifc, pkg):
@@ -146,7 +169,8 @@ def solve2(repo, unbound, bound={}, pref=lambda i,ps:None):
       i_min = None
       ps_min = None
       for i in unbound:
-        ps = repo.ifc_implementors(i)
+        ps = set(repo.ifc_implementors(i))
+        ps.intersection_update(pkgs)
         if i_min is None or len(ps) < len(ps_min):
           i_min = i
           ps_min = ps
