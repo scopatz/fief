@@ -1,11 +1,38 @@
 import sys
-from collections import namedtuple
 
 from repository import Repo, Imp
 
-Soln = namedtuple('Soln', ['ifc2pkg','pkg2soln'])
+class Soln(object):
+  def __init__(me, ifc2pkg, pkg2soln):
+    me._ifc2pkg = ifc2pkg
+    me._pkg2soln = pkg2soln
+    me._v = (frozenset(ifc2pkg.iteritems()), frozenset(pkg2soln.iteritems()))
+  def __getstate__(me):
+    return (me._ifc2pkg, me._pkg2soln)
+  def __setstate__(me, s):
+    me._ifc2pkg, me._pkg2soln = s
+    me._v = (frozenset(me._ifc2pkg.iteritems()), frozenset(me._pkg2soln.iteritems()))
+  def __hash__(me):
+    return hash(me._v)
+  def __eq__(me, that):
+    return me._v == that._v
+  def __ne__(me, that):
+    return me._v != that._v
+  def __str__(me):
+    def indent(s):
+      return ' ' + s.replace('\n','\n ')
+    return 'ifc2pkg=' + repr(me._ifc2pkg) + '\n' + \
+      '\n'.join('pkg ' + str(p) + ':\n' + indent(str(s)) for p,s in me._pkg2soln.items())
+  def ifc2pkg(me, ifc):
+    return me._ifc2pkg.get(ifc)
+  def pkg2soln(me, pkg):
+    return me._pkg2soln.get(pkg)
+  def ifcs(me):
+    return set(me._ifc2pkg.iterkeys())
+  def pkgs(me):
+    return set(me._pkg2soln.iterkeys())
 
-class SolutionError(Exception):
+class SolveError(Exception):
   pass
 
 def implicate(repo, ifcs, imply=lambda x,on: False):
@@ -22,56 +49,57 @@ def implicate(repo, ifcs, imply=lambda x,on: False):
   return on
 
 def solve(repo, ifcs, pref=lambda i,ps:None):
-  """
-  Returns value of type Soln such that
-  Soln = (ifc2pkg:{ifc:pkg}, pkg2soln:{pkg:Soln})
-  """
-  ifcs = frozenset(ifcs)
-  solns = {}
-  holes = {}
-  def down(ifcs, path):
-    def rank(p):
-      return sum(1 if p in hole else 0 for hole in path)
-    def pref2(i, ps):
-      p = pref(i, ps)
-      return () if p is None else (p,)
-    pkgs = set(p for p in repo.packages() if rank(p) < 2)
-    s = solve2(repo, pkgs, ifcs, pref2)
-    solns[path] = s
-    ps = set(s.itervalues())
-    
-    p_reqi = {} # pkg -> set(ifc) needed for building
-    p_reqp = {} # pkg -> set(pkg) needed for building (implementing p_reqi)
-    for p in ps:
-      imps = set(i for i in repo.pkg_implements(p) if i in s and s[i] == p)
-      p_reqi[p] = repo.pkg_ifcs_buildreqs(p, imps)
-      p_reqp[p] = set(s[i] for i in p_reqi[p])
-    
-    holes[path] = cycle_sets(p_reqp)
-    for hole in holes[path]:
-      ifcs = set()
-      for p in hole:
-        ifcs.update(p_reqi[p])
-      down(ifcs, path + (hole,))
-  down(ifcs, ())
+  def imps(soln, pkg):
+    return set(i for i in repo.pkg_implements(pkg) if soln.get(i) == pkg)
   
-  def tree(path):
-    s = solns[path]
-    hole = holes[path]
-    ps = set(s.itervalues())
-    pkg2soln = {}
-    for p in ps:
-      imps = set(i for i in repo.pkg_implements(p) if s.get(i) == p)
+  def pref2(i, ps):
+    p = pref(i, ps)
+    return () if p is None else (p,)
+  
+  @_memoize
+  def down(ifcs, above):
+    pkgs = set(p for p in repo.packages() if above.count(p) < 2)
+    i2p = _solve_run(repo, pkgs, ifcs, pref2)
+    pkgs = set(i2p.itervalues())
+    p2s = {}
+    for p in pkgs:
+      reqs = repo.pkg_ifcs_buildreqs(p, imps(i2p, p))
+      p2s[p] = down(frozenset(reqs), above + (p,))
+    return Soln(i2p, p2s)
+  
+  return down(frozenset(ifcs), ())
+
+def _runset(repo, soln, ifcs):
+  ifcs = set(ifcs)
+  more = ifcs
+  while len(more) > 0:
+    more0 = more
+    more = []
+    for i in more0:
+      p = soln[i]
+      imps = set(i for i in repo.pkg_implements(p) if soln.get(i) == p)
       reqs = repo.pkg_ifcs_runreqs(p, imps)
-      pkg2soln[p] = Soln(ifc2pkg=dict((i,s[i]) for i in reqs)
-    return Soln(ifc2pkg=s, pkg2soln=pkg2soln)
+      for r in reqs:
+        if r not in ifcs:
+          ifcs.add(r)
+          more.append(r)
+  return ifcs
   
-    
-def cycle_sets(xs):
+def _memoize(f):
+  m = {}
+  def g(*a, **kw):
+    x = (tuple(a), frozenset(kw.iteritems()))
+    if x not in m:
+      m[x] = f(*a,**kw)
+    return m[x]
+  return g
+
+def _cycle_sets(xs):
   def tclose(xs):
     xs = dict((x,set(xs[x])) for x in xs)
     again = True
     while again:
+      again = False
       for x in xs:
         for y in list(xs[x]):
           n0 = len(xs[x])
@@ -93,7 +121,7 @@ def cycle_sets(xs):
   them = dict((id(s),s) for s in cy.itervalues())
   return [frozenset(s) for s in them.itervalues()]
 
-def solve2(repo, pkgs, unbound, pref=lambda i,ps:None):
+def _solve_run(repo, pkgs, unbound, pref=lambda i,ps:None):
   """
   Returns the dict that maps interfaces to packages.
   It will be complete with all buildtime/runtime dependencies and subsumed
@@ -109,6 +137,8 @@ def solve2(repo, pkgs, unbound, pref=lambda i,ps:None):
   """
   
   pkgs = set(pkgs)
+  
+  print 'solve_run: pkgs=',pkgs,' ifcs=',unbound
   
   # solver state
   unbound = set(unbound)
@@ -146,9 +176,15 @@ def solve2(repo, pkgs, unbound, pref=lambda i,ps:None):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    reqs = list(repo.pkg_ifc_runreqs(pkg, ifc))
-    reqs += repo.pkg_ifc_buildreqs(pkg, ifc)
-    for i in reqs:
+    rreqs0 = repo.pkg_ifc_runreqs(pkg, ifc)
+    rreqs = set(rreqs0)
+    breqs = repo.pkg_ifc_buildreqs(pkg, ifc)
+    for br in breqs:
+      for rr in rreqs0:
+        if rr in repo.ifc_subsets(br):
+          rreqs.add(br)
+    
+    for i in rreqs:
       if i not in world:
         unbound.add(i)
         unbound_adds.append(i)
@@ -213,11 +249,11 @@ def solve2(repo, pkgs, unbound, pref=lambda i,ps:None):
   numsoln = 0
   for soln in branch():
     if numsoln == 1:
-      raise SolutionError("Interface solution ambiguity.")
+      raise SolveError("Interface solution ambiguity.")
     ans = soln
     numsoln += 1
   if numsoln == 0:
-    raise SolutionError("Interfaces unsolvable.")
+    raise SolveError("Interfaces unsolvable.")
   return ans
 
 def test(ifcs=['cc']):
@@ -228,7 +264,7 @@ def test(ifcs=['cc']):
   })
   def pref(i,ps):
     if i=='cc' and 'gcc' in ps:
-      return ['gcc']
+      return 'gcc'
     else:
-      return []
-  return solve(repo, ifcs, pref)
+      return None
+  print str(solve(repo, ifcs, pref))
