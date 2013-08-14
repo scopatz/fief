@@ -17,12 +17,12 @@ Imp = repository.Imp
 
 def deliver_a(fief, ifcs, lazy=False):
   """
-  When lazy=True, returns (ifc2pkg, will_build) where:
-    ifc2pkg: dict that maps interfaces to chosen packages
+  When lazy=True, returns (soln, will_build) where:
+    soln: solve.Soln
     will_build: set of packages that will require building
     
   When lazy=False, returns (ifc2pkg, delv) where:
-    ifc2pkg: dict that maps interfaces to chosen packages
+    soln: solve.Soln
     delv: (ifc,what)->deliverable -- lambda to retrieve deliverables
   """
    
@@ -30,7 +30,7 @@ def deliver_a(fief, ifcs, lazy=False):
     return [p for p in [fief.preferred_package(ifc)] if p is not None and p in pkgs]
   
   soln = None # this will eventually be the used solution
-  slim_soln = _unique_soln(fief, solve.solve(fief.repo, ifcs, slim_pref, fief.implied))
+  slim_soln = solve.solve(fief.repo, ifcs, slim_pref)
   
   @_memoize(None)
   def package_builder(pkg):
@@ -234,34 +234,6 @@ def deliver_a(fief, ifcs, lazy=False):
       builts[pkg] = yield async.Wait(fut)
     
     yield async.Result((soln, easy.deliverabler(fief.packages, soln, builts)))
-
-def _unique_soln(fief, solver):
-  num = 0
-  ambig = {}
-  for soln in solver:
-    num += 1
-    for x in soln:
-      ambig[x] = ambig.get(x, set())
-      ambig[x].add(str(soln[x]))
-      if len(ambig[x]) > 1:
-        break
-  
-  if num != 1:
-    if fief is not None:
-      if num > 1:
-        msg = "Package selection for the following interface(s) is ambiguous:"
-        msg += '\n  '.join(str(i) + ': ' + ', '.join(ps) for i,ps in ambig.items() if len(ps) > 1)
-        raise SolutionError(msg)
-      else:
-        empt = [i for i in fief.repo.interfaces() if len(fief.repo.ifc_implementors(i)) == 0]
-        msg = "No package solution could be found."
-        if len(empt) > 0:
-          msg += "  The following interfaces have no implementing packages: " + ", ".join(empt)
-        raise SolutionError(msg)
-    else:
-      raise SolutionError()
-  
-  return soln
 
 def _memoize(*ps):
   def decorate(f):
