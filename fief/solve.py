@@ -52,18 +52,19 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
   def imps(soln, pkg):
     return set(i for i in repo.pkg_implements(pkg) if soln.get(i) == pkg)
   
-  def pref2(i, ps):
-    p = pref(i, ps)
-    return () if p is None else (p,)
-  
   @_memoize
   def down(ifcs, above):
     pkgs = set(p for p in repo.packages() if above.count(p) < 2)
-    i2p = _solve_run(repo, pkgs, ifcs, pref2)
+    s = _solve_flat(repo, pkgs, ifcs, pref)
+    i2p = dict((i,s[i]) for i in _runset(repo, s, ifcs))
     pkgs = set(i2p.itervalues())
     p2s = {}
     for p in pkgs:
       reqs = repo.pkg_ifcs_buildreqs(p, imps(i2p, p))
+      if any(s[r]==p for r in reqs): # cyclic package
+        p2s[p] = down(frozenset(reqs), above + (p,))
+      else:
+        p2s[p] = 
       p2s[p] = down(frozenset(reqs), above + (p,))
     return Soln(i2p, p2s)
   
@@ -83,7 +84,7 @@ def _runset(repo, soln, ifcs):
         if r not in ifcs:
           ifcs.add(r)
           more.append(r)
-  return ifcs
+  return repo.ifcs_subsets(ifcs)
   
 def _memoize(f):
   m = {}
@@ -121,7 +122,7 @@ def _cycle_sets(xs):
   them = dict((id(s),s) for s in cy.itervalues())
   return [frozenset(s) for s in them.itervalues()]
 
-def _solve_run(repo, pkgs, unbound, pref=lambda i,ps:None):
+def _solve_flat(repo, pkgs, unbound, pref=lambda i,ps:None):
   """
   Returns the dict that maps interfaces to packages.
   It will be complete with all buildtime/runtime dependencies and subsumed
@@ -131,14 +132,12 @@ def _solve_run(repo, pkgs, unbound, pref=lambda i,ps:None):
   pkgs: iterable of packages to consider
   unbound: iterable of initial required interfaces
   bound: bound interfaces, must be closed under subsumption
-  pref: (ifc,pkgs)->[pkg] -- given a choice of implementing packages,
-        are there some that would be best?  Solutions beyond those found with
+  pref: (ifc,pkgs)->(pkg|None) -- given a choice of implementing packages,
+        is there one that would be best?  Solutions beyond those found with
         one of these bindings will be skipped.
   """
   
   pkgs = set(pkgs)
-  
-  print 'solve_run: pkgs=',pkgs,' ifcs=',unbound
   
   # solver state
   unbound = set(unbound)
@@ -176,15 +175,9 @@ def _solve_run(repo, pkgs, unbound, pref=lambda i,ps:None):
         unbound.discard(i)
         unbound_dels.append(i)
     
-    rreqs0 = repo.pkg_ifc_runreqs(pkg, ifc)
-    rreqs = set(rreqs0)
-    breqs = repo.pkg_ifc_buildreqs(pkg, ifc)
-    for br in breqs:
-      for rr in rreqs0:
-        if rr in repo.ifc_subsets(br):
-          rreqs.add(br)
-    
-    for i in rreqs:
+    reqs = list(repo.pkg_ifc_runreqs(pkg, ifc))
+    reqs += repo.pkg_ifc_buildreqs(pkg, ifc)
+    for i in reqs:
       if i not in world:
         unbound.add(i)
         unbound_adds.append(i)
@@ -217,34 +210,22 @@ def _solve_run(repo, pkgs, unbound, pref=lambda i,ps:None):
       # bind interface to preferred packages first
       while len(ps) > 1:
         best = pref(i, ps)
-        if len(best or ()) == 0:
-          break
-        solved = False
-        for p in best:
+        if best is not None:
+          p = best
           ps.discard(p)
-          mins = (i1 for i1 in repo.pkg_implements(p) if i in repo.ifc_subsets(i1))
-          mins = repo.min_ifcs(mins)
-          for i1 in mins:
-            revert = bind(i1, p)
-            if revert is not None:
-              for soln in branch():
-                solved = True
-                yield soln
-              revert()
-        if solved:
-          ps = ()
-          break
-      
-      # bind interface to remaining non-preferred packages
-      for p in ps:
+        else:
+          p = ps.pop()
         mins = (i1 for i1 in repo.pkg_implements(p) if i in repo.ifc_subsets(i1))
         mins = repo.min_ifcs(mins)
         for i1 in mins:
           revert = bind(i1, p)
           if revert is not None:
             for soln in branch():
+              solved = True
               yield soln
             revert()
+        if best is not None and solved:
+          break
   
   numsoln = 0
   for soln in branch():
