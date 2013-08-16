@@ -27,7 +27,8 @@ def deliver_a(fief, ifcs, lazy=False):
   """
    
   def slim_pref(ifc, pkgs):
-    return [p for p in [fief.preferred_package(ifc)] if p is not None and p in pkgs]
+    p = fief.preferred_package(ifc)
+    return p if p in pkgs else None
   
   soln = None # this will eventually be the used solution
   slim_soln = solve.solve(fief.repo, ifcs, slim_pref)
@@ -59,7 +60,9 @@ def deliver_a(fief, ifcs, lazy=False):
         return fief.packages[x[1]].deliverer() if x[1] in fief.packages else None
       elif x[0]=='env':
         return os.environ.get(x[1])
-      elif x[0]=='implementor':
+      elif x[0]=='soln':
+        s = soln
+        for p in 
         return soln.get(x[1])
       elif x[0]=='option':
         return fief.option(x[1], x[2])
@@ -71,6 +74,8 @@ def deliver_a(fief, ifcs, lazy=False):
         return fief.repo.pkg_implements(x[1])
       else:
         return None
+    elif x == 'soln':
+      return 
     else:
       return None
   
@@ -111,26 +116,13 @@ def deliver_a(fief, ifcs, lazy=False):
     return h
   
   def soln_subsumes(a, b):
-    for x in b:
-      if a.get(x) != b[x]:
+    for x in b.ifc2pkg:
+      if a.ifc2pkg.get(x) != b[x]:
+        return False
+    for p in b.pkg2soln:
+      if p not in a.pkg2soln or not soln_subsumes(a.pkg2soln[p], b.pkg2soln[p]):
         return False
     return True
-  
-  @_memoize(id, None)
-  def soln_fragment(soln, pkg):
-    more = list(i for i in fief.repo.pkg_implements(pkg) if soln.get(i)==pkg)
-    frag = set(more)
-    while len(more) > 0:
-      more0 = more
-      more = []
-      for a in more0:
-        on = (b for b in fief.repo.pkg_implements(soln[a]) if soln.get(b)==soln[a])
-        reqs = fief.repo.pkg_ifcs_requires(soln[a], on)
-        for req in reqs:
-          if req not in frag:
-            frag.add(req)
-            more.append(req)
-    return dict((i,soln[i]) for i in frag)
   
   # build a fat repo with dummy packages representing those already built
   fat_pkgs = {}
@@ -281,19 +273,14 @@ def _package_memo_build(procurer, pkg, src, builder_a, opts):
       class WrapCtx(object):
         package = pkg
         source = site
-        
         def __getattr__(me, x):
           return getattr(ctx, x)
-
         def __getitem__(me, x):
           return ctx[x]
-
         def option_soft(me, x):
           return opts(pkg, x)
-        
         def option_hard(me, x):
           return ctx['option',pkg,x]
-
       built = yield async.Sync(builder_a(WrapCtx()))
     finally:
       cleanup()
