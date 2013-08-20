@@ -8,9 +8,14 @@ class Soln(object):
     me._nd_pkg = {}
     me._nd_imps = {}
     me._nd_ifc_nd = {}
+    for s in pkg2soln.itervalues():
+      me._nd_pkg.update(s._nd_pkg)
+      me._nd_imps.update(s._nd_imps)
+      me._nd_ifc_nd.update(s._nd_ifc_nd)
+    
     for p in set(ifc2pkg.itervalues()):
       imps = frozenset(i for i in ifc2pkg if ifc2pkg[i] == p)
-      nd = valtool.Hasher().eat(p).eat(imps).eat(pkg2soln[p]).digest()
+      nd = valtool.Hasher().eat(p).eat(pkg2soln[p]).digest()
       me._nd_ifc_nd[nd] = me._nd_ifc_nd.get(nd, {})
       me._nd_ifc_nd[nd][
     me._v = (frozenset(ifc2pkg.iteritems()), frozenset(pkg2soln.iteritems()))
