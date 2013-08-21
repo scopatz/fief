@@ -4,39 +4,83 @@ from repository import Repo, Imp
 import valtool
 
 class Soln(object):
-  def __init__(me, repo, ifc2pkg, pkg2soln):
+  def __init__(me, ifc2pkg, pkg2soln):
+    me._env = set()
+    me._i2n = None
     me._nd_pkg = {}
     me._nd_imps = {}
-    me._nd_ifc_nd = {}
+    me._nd_env = {}
     for s in pkg2soln.itervalues():
       me._nd_pkg.update(s._nd_pkg)
       me._nd_imps.update(s._nd_imps)
-      me._nd_ifc_nd.update(s._nd_ifc_nd)
+      me._nd_env.update(s._nd_env)
     
     for p in set(ifc2pkg.itervalues()):
       imps = frozenset(i for i in ifc2pkg if ifc2pkg[i] == p)
-      nd = valtool.Hasher().eat(p).eat(pkg2soln[p]).digest()
-      me._nd_ifc_nd[nd] = me._nd_ifc_nd.get(nd, {})
-      me._nd_ifc_nd[nd][
-    me._v = (frozenset(ifc2pkg.iteritems()), frozenset(pkg2soln.iteritems()))
+      nd = valtool.Hasher().eatseq([p, imps, pkg2soln[p]._env]).digest()
+      me._env.add(nd)
+      me._nd_pkg[nd] = p
+      me._nd_imps[nd] = imps
+      me._nd_env[nd] = pkg2soln[p]._env
+  
+    me._env = frozenset(me._env)
+  
+  def env_nodes(me):
+    return me._env
+  def node_pkg(me, nd):
+    return me._nd_pkg[nd]
+  def node_imps(me, nd):
+    return me._nd_imps[nd]
+  def node_env(me, nd):
+    return me._nd_env[nd]
+  
+  def all_nodes(me, initial=None):
+    if initial is None:
+      initial = me._env
+    aset = set()
+    alist = []
+    def drill(xs):
+      for x in xs:
+        if x not in aset:
+          drill(me._nd_env[x])
+          assert x not in aset # cycle!
+          aset.add(x)
+          alist.append(x)
+    drill(initial)
+    return alist
+  
+  def node_soln(me, nd):
+    s = Soln.__new__(Soln)
+    s._i2n = None
+    s._env = me._nd_env[nd]
+    s._nd_pkg = me._nd_pkg
+    s._nd_imps = me._nd_imps
+    s._nd_env = me._nd_env
+    return s
+  
+  def ifc2node(me):
+    if me._i2n is None:
+      i2n = {}
+      for e in me._env:
+        for i in me._nd_imps[e]:
+          i2n[i] = e
+      me._i2n = i2n
+    return me._i2n
+  
   def __getstate__(me):
-    return (me.ifc2pkg, me.pkg2soln)
+    a = me.all_nodes()
+    def shrink(d):
+      return d if len(a) == len(d) else dict((x,d[x]) for x in a)
+    return (me._env, shrink(me._nd_pkg), shrink(me._nd_imps), shrink(me._nd_env))
   def __setstate__(me, s):
-    me.ifc2pkg, me.pkg2soln = s
-    me._v = (frozenset(me.ifc2pkg.iteritems()), frozenset(me.pkg2soln.iteritems()))
+    me._env, me._nd_pkg, me._nd_imps, me._nd_env = s
   def __hash__(me):
-    return hash(me._v)
+    return hash(me._env)
   def __eq__(me, that):
-    return me._v == that._v
+    return me._env == that._env
   def __ne__(me, that):
-    return me._v != that._v
-  def __str__(me):
-    def indent(s):
-      return ' ' + s.replace('\n','\n ')
-    return 'ifc2pkg=' + repr(me.ifc2pkg) + '\n' + \
-      '\n'.join('pkg ' + str(p) + ':\n' + indent(str(s)) for p,s in me.pkg2soln.items())
-  def pkgids(me):
-    
+    return me._env != that._env
+
 class SolveError(Exception):
   pass
 
@@ -70,7 +114,6 @@ def solve(repo, ifcs, pref=lambda i,ps:None):
           p2s[p] = soln(reqs)
       return Soln(i2p, p2s)
     return soln(ifcs)
-  
   return down(frozenset(ifcs), ())
 
 def _impset(repo, soln, pkg):

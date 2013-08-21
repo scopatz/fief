@@ -226,7 +226,7 @@ class _FileHost(Host):
       return (t1, h1) if (t1, h1) != (t0, h0) else old
     reals = dict((p, os.path.realpath(p)) for p in paths)
     ans = yield async.Sync(stash.updates_a(reals.keys(), action))
-    ans = dict((k,th[1]) for k,th in ans.iteritems())
+    ans = dict((k,'' if th is None else th[1]) for k,th in ans.iteritems())
     yield async.Result(ans)
 
 FileHost = _FileHost()
@@ -639,12 +639,12 @@ _argmode_wip_tag = {
 }
 
 _tag_keyval_check = {
-  _tag_inp: lambda k,v: type(v) is str and len(v) == 16,
+  _tag_inp: lambda k,v: type(v) is str and len(v) in (0,16),
   _tag_arg: lambda k,v: True,
-  _tag_argh: lambda k,v: type(v) is str and len(v) == 16,
+  _tag_argh: lambda k,v: type(v) is str and len(v) in (0,16),
   _tag_args_db: lambda k,v: type(k) is tuple and type(v) is tuple,
   _tag_args_wip: lambda k,v: type(k) is tuple and type(v) is dict,
-  _tag_argsh_db: lambda k,v: type(k) is tuple and type(v) is str and len(v) == 16,
+  _tag_argsh_db: lambda k,v: type(k) is tuple and type(v) is str and len(v) in (0,16),
   _tag_argsh_wip: lambda k,v: type(k) is tuple and type(v) is dict
 }
 

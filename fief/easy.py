@@ -207,33 +207,21 @@ def dependent_pkgs(ctx, pkg):
   assert pkg not in pkgs
   return pkgs
 
-def deliverabler(pkgobjs, ifc2pkg, pkg2built):
-  def cb(ifc, what):
-    pkg = ifc2pkg[ifc]
-    return pkgobjs[pkg].deliverer()(ifc, what, pkg2built[pkg], cb)
-  return cb
-
-def deliverabler_a(ctx):
-  deps = dependent_pkgs(ctx, ctx.package)
-  a = ctx.args([('builder',p) for p in deps] + [('deliverer',p) for p in deps])
-  bldrs = dict((x,y) for (tag,x),y in a.iteritems() if tag=='builder')
-  delvs = dict((x,y) for (tag,x),y in a.iteritems() if tag=='deliverer')
-  
-  builts = {}
-  for dep in deps:
-    builts[dep] = yield async.Sync(ctx.memo_a(bldrs[dep]))
-  
-  def cb(ifc, what):
-    pkg = ctx['implementor',ifc]
-    return delvs[pkg](ifc, what, builts[pkg], cb)
-  
-  yield async.Result(cb)
+def deliveries(soln, nd_built, pkg_delv):
+  def d1(soln):
+    def d2(ifc, what):
+      nd = soln.ifc2node()[ifc]
+      p = soln.node_pkg(nd)
+      d = pkg_delv(p)
+      return d(ifc, what, nd_built(nd), d1(soln.node_soln(nd)))
+    return d2
+  return d1(soln)
 
 def gather_envdelta_a(ctx):
   ed = EnvDelta()
-  ifcs = dependent_ifcs(ctx, ctx.package)
-  delv = yield async.Sync(deliverabler_a(ctx))
-  for i in ifcs:
+  soln = ctx.soln
+  delv = yield async.Sync(ctx.deliveries_a())
+  for i in soln.ifc2node():
     e = delv(i, 'envdelta')
     if e is not None:
       ed.merge(e)
@@ -315,8 +303,12 @@ packages = {
   'sys_cc': PackageSys('cc'),
   #'sys_fortran': PackageAptGet('gfortran', ['fortran']),
   'sys_fortran': PackageSys('fortran'),
+}
+
+packages = {
+  'sys_cc': PackageSys('cc'),
   'zlib': PackageScript(
-      source='http://zlib.net/zlib-1.2.7.tar.gz',
+      source='http://zlib.net/zlib-1.2.8.tar.gz',
       py_file=_repo_py('zlib.py')
     ),
 }

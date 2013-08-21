@@ -3,7 +3,7 @@ import shutil
 from fief import async, Cmd, easy, EnvDelta, Imp
 
 implements = {
-  'zlib': Imp(requires='cc')
+  'zlib': Imp(buildreqs='cc')
 }
 
 def deliverable_envdelta(ifc, built, delv):
@@ -20,13 +20,10 @@ def deliverable_libs(ifc, built, delv):
   return frozenset(['z'])
 
 def build_a(ctx):
-  pkg = ctx.package
   path = ctx.source
-  root = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
-  os.mkdir(root)
-  
+  root = yield async.Sync(ctx.outdir_a())
   env = yield async.Sync(easy.gather_env_a(ctx))
-  cmdkws = {'cwd': path, 'tag': pkg, 'env': env}
+  cmdkws = {'cwd': path, 'tag': ctx.package, 'env': env}
   if os.name == 'nt':
     c = Cmd(ctx, **cmdkws)
     c.lit('make', '-f', 'win32/Makefile.gcc')

@@ -15,10 +15,10 @@ def main(ns, rcpath):
   def top_a():
     finst = yield async.Sync(fief.Fief.new_a(rcpath))
     activated = _magic.env_selection(finst)
-    ifc2pkg, delv = yield async.Sync(deliver.deliver_a(finst, activated))
+    soln, delv = yield async.Sync(deliver.deliver_a(finst, activated))
     
     ed = EnvDelta()
-    for ifc in ifc2pkg:
+    for ifc in soln.ifc2node():
       e = delv(ifc, 'envdelta')
       if e is not None:
         ed.merge(e)
