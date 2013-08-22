@@ -273,24 +273,42 @@ def _memo_build(procurer, node, opts):
     # now build
     try:
       class WrapCtx(object):
-        def __init__(me):
+        @classmethod
+        def new_a(cls):
+          me = cls()
           me.package = pkg
           me.source = site
           me.soln = soln
+          me.osenv = yield async.Sync(easy.gather_env_a(me))
+          yield async.Result(me)
+        
         def __getattr__(me, x):
           return getattr(ctx, x)
+        
         def __getitem__(me, x):
           return ctx[x]
+        
         def outdir_a(me):
           f = yield async.Sync(ctx.outfile_a(os.path.join('build', pkg)))
           os.mkdir(f)
           yield async.Result(f)
-        def i_implement(me, ifc):
+        
+        def command(me, cwd=None, envmod=lambda e:e):
+          return bake.Cmd(ctx,
+            tag=me.package,
+            env=envmod(me.osenv),
+            cwd=me.source if cwd is None else cwd
+          )
+        
+        def implementing(me, ifc):
           return ifc in ctx['_node_imps',node]
+        
         def option_soft(me, x):
           return opts(pkg, x)
+        
         def option_hard(me, x):
           return ctx['_option',pkg,x]
+        
         def deliveries_a(me):
           s = ctx['_node_soln',node]
           ns = s.env_nodes()
@@ -304,7 +322,8 @@ def _memo_build(procurer, node, opts):
           pkg_delv = lambda p: p2d['_pkg_deliverer',p]
           yield async.Result(easy.deliveries(s, nd2blt.get, pkg_delv))
       
-      built = yield async.Sync(pbld(WrapCtx()))
+      wrap = yield async.Sync(WrapCtx.new_a())
+      built = yield async.Sync(pbld(wrap))
     finally:
       cleanup()
     yield async.Result(built)

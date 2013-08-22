@@ -37,17 +37,16 @@ class Soln(object):
   def all_nodes(me, initial=None):
     if initial is None:
       initial = me._env
-    aset = set()
-    alist = []
+    xset = set()
+    xlist = []
     def drill(xs):
       for x in xs:
-        if x not in aset:
+        if x not in xset:
           drill(me._nd_env[x])
-          assert x not in aset # cycle!
-          aset.add(x)
-          alist.append(x)
+          xset.add(x)
+          xlist.append(x)
     drill(initial)
-    return alist
+    return xlist
   
   def node_soln(me, nd):
     s = Soln.__new__(Soln)
@@ -80,6 +79,17 @@ class Soln(object):
     return me._env == that._env
   def __ne__(me, that):
     return me._env != that._env
+  
+  def __repr__(me):
+    return 'Soln(\n' + str(me) + ')'
+  def __str__(me):
+    def indent(s):
+      return '' if len(s)==0 else '\n'.join(['  '+l for l in s.split('\n')])
+    return '\n'.join([
+      'pkg='+str(me._nd_pkg[n]) + '; imps=' + str(me._nd_imps[n])+'\n'+\
+      indent(str(me.node_soln(n)))
+      for n in me._env
+    ])
 
 class SolveError(Exception):
   pass
@@ -121,8 +131,7 @@ def _impset(repo, soln, pkg):
   
 def _runset(repo, soln, ifcs):
   ifcs = set(ifcs)
-  more = ifcs
-  pkgs = set()
+  more = list(ifcs)
   while len(more) > 0:
     more0 = more
     more = []
@@ -271,6 +280,8 @@ def _solve_acyclic(repo, pkgs, unbound, pref=lambda i,ps:None):
   numsoln = 0
   for soln in branch():
     if numsoln == 1:
+      print 'soln 1:', ans
+      print 'soln 2:', soln
       raise SolveError("Interface solution ambiguity.")
     ans = soln
     numsoln += 1

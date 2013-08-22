@@ -42,6 +42,11 @@ class Hasher(object):
     act[set] = f
     
     def f(put,s,x):
+      put('fs.%x.' % len(x))
+      s += sorted(x)
+    act[frozenset] = f
+    
+    def f(put,s,x):
       put('sz.%x.' % len(x))
       put(x)
     act[str] = f

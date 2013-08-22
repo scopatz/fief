@@ -23,9 +23,10 @@ def main(ns, rcpath):
       if e is not None:
         ed.merge(e)
     
-    env = ed.apply(os.environ)
-    env['FIEF_KNOWN_INTERFACES'] = " ".join(sorted(finst.repo.interfaces()))
-    _magic.exportvars(env)  
+    env0 = dict(os.environ)
+    env1 = ed.apply(env0)
+    env1['FIEF_KNOWN_INTERFACES'] = " ".join(sorted(finst.repo.interfaces()))
+    _magic.exportvars(env1, env0)  
 
   try:
     async.run(top_a())

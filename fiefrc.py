@@ -4,7 +4,9 @@ from fief import easy
 stash = ".fief-stash"
 
 preference = {
-  'mpi2': 'mpich'
+  'mpi2': 'mpich',
+  'cc': 'gcc',
+  'c++': 'gcc',
 }.get
 
 def option(pkg, x):

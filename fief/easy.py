@@ -9,18 +9,17 @@ from envdelta import EnvDelta
 from repository import Imp, Package
 
 class PackageSys(Package):
-  def __init__(me, ifc):
-    me._ifc = ifc
-  
+  def __init__(me, ifc, sys_ifc=None):
+    me._imps = {}
+    me._imps[ifc] = Imp()
+    if sys_ifc is not None:
+      me._imps[sys_ifc] = Imp(subsumes=[ifc])
   def source(me):
     return None
-  
   def implements_a(me, opts, oven):
-    yield async.Result({me._ifc: Imp()})
-  
+    yield async.Result(me._imps)
   def deliverer(me):
     return lambda ifc,what,built,delv: None
-  
   def builder(me):
     def build_a(ctx):
       yield async.Result(None)
@@ -113,21 +112,17 @@ class PackageConfigMakeInstall(Package):
     libs = me._libs
     
     def build_a(ctx):
-      root = yield async.Sync(ctx.outfile_a(os.path.join('build', ctx.package)))
-      os.mkdir(root)
+      root = yield async.Sync(ctx.outdir_a())
       
-      env = yield async.Sync(gather_env_a(ctx))
-      cmdkws = {'cwd': ctx.source, 'tag': ctx.package, 'env': env}
-      
-      c = Cmd(ctx, **cmdkws)
+      c = ctx.command()
       c.lit('./configure', '--prefix=' + root)
       yield async.Sync(c.exec_a())
       
-      c = Cmd(ctx, **cmdkws)
+      c = ctx.command()
       c.lit('make', ctx.option_soft('make-opt-parallel'))
       yield async.Sync(c.exec_a())
       
-      c = Cmd(ctx, **cmdkws)
+      c = ctx.command()
       c.lit('make','install')
       yield async.Sync(c.exec_a())
       
@@ -237,6 +232,7 @@ def c_envdelta(root):
       ('PATH', os.path.join(root, 'bin')),
       ('CPATH', os.path.join(root, 'include')),
       ('LD_LIBRARY_PATH', os.path.join(root, 'lib')),
+      ('LIBRARY_PATH', os.path.join(root, 'lib')),
       ('PKG_CONFIG_PATH', os.path.join(root, 'lib', 'pkgconfig')),
       ('MANPATH', os.path.join(root, 'share', 'man')),
     ] if os.path.isdir(path))
@@ -306,7 +302,27 @@ packages = {
 }
 
 packages = {
-  'sys_cc': PackageSys('cc'),
+  'gmp': PackageConfigMakeInstall(
+      source='ftp://ftp.gnu.org/gnu/gmp/gmp-5.1.2.tar.bz2',
+      imps={'gmp': Imp(requires='cc')},
+      libs=['gmp']
+    ),
+  'mpc': PackageConfigMakeInstall(
+      source='http://multiprecision.org/mpc/download/mpc-1.0.1.tar.gz',
+      imps={'mpc': Imp(requires=['cc','gmp','mpfr'])},
+      libs=['mpc']
+    ),
+  'mpfr': PackageConfigMakeInstall(
+      source='http://www.mpfr.org/mpfr-current/mpfr-3.1.2.tar.gz',
+      imps={'mpfr': Imp(requires=['cc','gmp'])},
+      libs=['mpfr']
+    ),
+  'gcc': PackageScript(
+      source='http://www.netgull.com/gcc/releases/gcc-4.8.1/gcc-4.8.1.tar.bz2',
+      py_file=_repo_py('gcc.py')
+    ),
+  'sys_cc': PackageSys('cc', 'sys_cc'),
+  'sys_c++': PackageSys('c++', 'sys_c++'),
   'zlib': PackageScript(
       source='http://zlib.net/zlib-1.2.8.tar.gz',
       py_file=_repo_py('zlib.py')
